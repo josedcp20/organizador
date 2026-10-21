@@ -10,6 +10,8 @@ crons = ["*/10 * * * *"]
 TZ = "Europe/Madrid"
 ALLOWED_ORIGIN = "https://josedcp20.github.io"
 APP_URL = "https://josedcp20.github.io/organizador/"
+# Debe coincidir EXACTAMENTE con la URI autorizada en Google Cloud (M7). En local se sobrescribe en .dev.vars.
+GOOGLE_REDIRECT_URI = "https://organizador-api.jose-dcp20.workers.dev/oauth/google/callback"
 
 [[d1_databases]]
 binding = "DB"

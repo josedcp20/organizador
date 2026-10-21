@@ -114,14 +114,27 @@ describe('guard de rutas y logout', () => {
   });
 
   it('logout en Ajustes borra token y vuelve a login', async () => {
+    // Ajustes pide el estado de Google al montarse (con sesion); tras logout no hay mas llamadas.
+    fetchMock.mockResolvedValue(
+      json({
+        configured: true,
+        connected: false,
+        reason: 'not_connected',
+        scopes: [],
+        connectedAt: null,
+        lastError: null,
+      }),
+    );
     setToken('t');
     window.location.hash = '#/ajustes';
     render(App);
     expect(screen.getByText('conectado')).toBeTruthy();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(String(fetchMock.mock.calls[0][0])).toBe(`${BASE}/api/google/status`);
     await fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }));
     await waitFor(() => expect(window.location.hash).toBe('#/login'));
     expect(getToken()).toBeNull();
     await waitFor(() => expect(screen.getByLabelText('Token de acceso')).toBeTruthy());
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

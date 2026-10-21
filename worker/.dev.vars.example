@@ -3,9 +3,11 @@
 #   npm run gen:token -w worker
 # El TOKEN va en la PWA/Scriptable/Atajos; aqui va solo el HASH.
 APP_TOKEN_SHA256=
+# OAuth Google (cliente "Aplicacion web" de Google Cloud, ver docs/setup-google-cloud.md)
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-# Clave AES-256 en base64
+# Claves de 32 bytes (base64url). Generar con: npm run gen:secrets -w worker
+# Usa valores DISTINTOS a los de produccion.
 TOKEN_ENC_KEY=
 OAUTH_STATE_KEY=
 VAPID_PRIVATE_KEY=
@@ -13,3 +15,6 @@ VAPID_PUBLIC_KEY=
 VAPID_SUBJECT=
 # Solo desarrollo local (habilita CORS para http://localhost:5173)
 ENV=dev
+# Desarrollo local: callback y vuelta a la web servidas en localhost (sobrescriben [vars]).
+GOOGLE_REDIRECT_URI=http://localhost:8787/oauth/google/callback
+APP_URL=http://localhost:5173/organizador/

@@ -19,6 +19,7 @@ export interface CallOptions {
   origin?: string;
   headers?: Record<string, string>;
   env?: Partial<Env>; // sobrescribe bindings/vars (p. ej. ENV='dev' o un DB falso)
+  body?: BodyInit;
 }
 
 export function call(path: string, opts: CallOptions = {}): Promise<Response> {
@@ -28,7 +29,7 @@ export function call(path: string, opts: CallOptions = {}): Promise<Response> {
   if (opts.origin) headers.set('Origin', opts.origin);
   return Promise.resolve(
     worker.fetch(
-      new Request(`https://example.com${path}`, { method: opts.method, headers }),
+      new Request(`https://example.com${path}`, { method: opts.method, headers, body: opts.body }),
       { ...env, ...opts.env },
       ctx,
     ),

@@ -5,16 +5,18 @@ import { errorBody } from './errors';
 import { auth } from './middleware/auth';
 import { cors } from './middleware/cors';
 import { me } from './routes/me';
+import { oauth } from './routes/oauth';
 import { getVersion } from './version';
 
 export const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors);
-// Auth en todo /api/* (excepto /api/health, ver PUBLIC_API_PATHS). /oauth/* (callback) queda fuera.
+// Auth en todo /api/* (excepto /api/health, ver PUBLIC_API_PATHS). /oauth/* (start/callback de Google) queda fuera: se autoriza con ticket/state firmados.
 app.use('/api/*', auth);
 
 app.get('/api/health', (c) => c.json({ ok: true, version: getVersion(c.env) }));
 app.route('/', me);
+app.route('/', oauth);
 
 app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 
