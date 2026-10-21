@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      # Incluye los tests del worker (workerd/miniflare, funciona en Linux).
+      - run: npm test
+      - run: npm run format:check
+      - run: npm run build -w web
+        env:
+          # Valor de prueba: solo valida que el build compila; no se despliega.
+          VITE_API_BASE: https://api.example.test

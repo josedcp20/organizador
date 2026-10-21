@@ -1,0 +1,47 @@
+name: Deploy worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - 'shared/**'
+      - '.github/workflows/deploy-worker.yml'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Nunca cancelar un despliegue/migracion en curso: se encolan.
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tests del worker
+        run: npm test -w worker
+      # Se usa el wrangler fijado en package-lock (npx/npm exec) en lugar de
+      # cloudflare/wrangler-action: sin dependencia de terceros con acceso al
+      # token y misma version que en local/tests.
+      - name: Migraciones D1 (antes del deploy)
+        working-directory: worker
+        run: npx wrangler d1 migrations apply organizador --remote
+      - name: Deploy
+        working-directory: worker
+        run: npx wrangler deploy --var "APP_VERSION:${GITHUB_SHA::7}"

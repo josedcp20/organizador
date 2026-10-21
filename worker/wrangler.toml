@@ -1,0 +1,19 @@
+name = "organizador-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[vars]
+TZ = "Europe/Madrid"
+ALLOWED_ORIGIN = "https://josedcp20.github.io"
+APP_URL = "https://josedcp20.github.io/organizador/"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "organizador"
+# ID devuelto por `wrangler d1 create organizador` (no es secreto).
+database_id = "78ad4ca2-5104-4380-b72f-16c0a812a82d"
+migrations_dir = "migrations"

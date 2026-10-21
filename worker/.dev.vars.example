@@ -1,0 +1,15 @@
+# Copiar a .dev.vars (ignorado por git) y rellenar. Nunca commitear valores reales.
+# Solo el HASH (hex, 64 caracteres) del token. Generar token + hash con:
+#   npm run gen:token -w worker
+# El TOKEN va en la PWA/Scriptable/Atajos; aqui va solo el HASH.
+APP_TOKEN_SHA256=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# Clave AES-256 en base64
+TOKEN_ENC_KEY=
+OAUTH_STATE_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_PUBLIC_KEY=
+VAPID_SUBJECT=
+# Solo desarrollo local (habilita CORS para http://localhost:5173)
+ENV=dev

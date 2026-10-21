@@ -1,0 +1,24 @@
+{
+  "name": "@organizador/worker",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Cloudflare Worker backend (Hono)",
+  "scripts": {
+    "lint": "eslint src test scripts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "gen:token": "node scripts/gen-token.mjs",
+    "dev": "wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local"
+  },
+  "dependencies": {
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.6",
+    "@cloudflare/workers-types": "^5.20261021.1",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.124.0"
+  },
+  "type": "module"
+}

@@ -1,0 +1,59 @@
+import { readable } from 'svelte/store';
+
+// Router basado en hash para la SPA: `#/ruta?clave=valor`
+export type Route = 'hoy' | 'calendario' | 'notas' | 'nota-rapida' | 'ajustes' | 'login';
+
+export interface RouteInfo {
+  name: Route;
+  path: string;
+}
+
+const ROUTES: Record<Route, string> = {
+  hoy: '#/hoy',
+  calendario: '#/calendario',
+  notas: '#/notas',
+  'nota-rapida': '#/nota-rapida',
+  ajustes: '#/ajustes',
+  login: '#/login',
+};
+
+const VALID_ROUTES = new Set<string>(Object.keys(ROUTES));
+
+function pathPart(hash: string): string {
+  const h = hash.startsWith('#/') ? hash.slice(2) : hash;
+  return h.split('?')[0];
+}
+
+export function getCurrentRoute(): Route {
+  const name = pathPart(window.location.hash);
+  return VALID_ROUTES.has(name) ? (name as Route) : 'hoy';
+}
+
+/** Parametros de query del hash actual (`#/login?token=abc`). */
+export function getQueryParams(): URLSearchParams {
+  const hash = window.location.hash;
+  const i = hash.indexOf('?');
+  return new URLSearchParams(i === -1 ? '' : hash.slice(i + 1));
+}
+
+export function navigateTo(route: Route): void {
+  window.location.hash = ROUTES[route];
+}
+
+export function getRouteInfo(route?: Route): RouteInfo {
+  const name = route || getCurrentRoute();
+  return { name, path: ROUTES[name] };
+}
+
+export function matchRoute(path: string): Route | null {
+  const name = pathPart(path);
+  return VALID_ROUTES.has(name) ? (name as Route) : null;
+}
+
+/** Ruta actual reactiva; unica fuente de verdad para la UI. */
+export const currentRoute = readable<Route>(getCurrentRoute(), (set) => {
+  const update = () => set(getCurrentRoute());
+  update();
+  window.addEventListener('hashchange', update);
+  return () => window.removeEventListener('hashchange', update);
+});
