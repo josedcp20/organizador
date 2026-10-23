@@ -1,4 +1,9 @@
-import type { CalendarInfo, CalendarPatch, CalendarsResponse } from '@organizador/shared';
+import type {
+  CalendarInfo,
+  CalendarPatch,
+  CalendarsResponse,
+  SyncResult,
+} from '@organizador/shared';
 import { apiFetch } from './api';
 
 export function fetchCalendars(): Promise<CalendarsResponse> {
@@ -19,8 +24,8 @@ export function patchCalendar(id: string, patch: CalendarPatch): Promise<Calenda
 }
 
 /** `POST /api/sync` (1/min). Los errores llegan como ApiError (429 rate_limited, 409 sync_busy...). */
-export function syncNow(): Promise<unknown> {
-  return apiFetch('/api/sync', { method: 'POST' });
+export function syncNow(): Promise<SyncResult> {
+  return apiFetch<SyncResult>('/api/sync', { method: 'POST' });
 }
 
 /** "hace X" en espanol a partir de un ISO UTC. Vacio/invalido -> "nunca". */

@@ -1,15 +1,14 @@
 <script lang="ts">
   import type { CalEvent } from '../lib/events';
+  import { eventTimeLabel } from '../lib/events';
 
-  let { event, compact = false }: { event: CalEvent; compact?: boolean } = $props();
+  let {
+    event,
+    day,
+    compact = false,
+  }: { event: CalEvent; day?: string; compact?: boolean } = $props();
 
-  const time = $derived(
-    event.allDay || !event.startTime
-      ? ''
-      : compact || !event.endTime
-        ? event.startTime
-        : `${event.startTime} - ${event.endTime}`,
-  );
+  const time = $derived(eventTimeLabel(event, day, compact));
 </script>
 
 <span

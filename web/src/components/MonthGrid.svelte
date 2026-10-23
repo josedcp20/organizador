@@ -44,7 +44,7 @@
       <span class="num">{Number(day.slice(8))}</span>
       <span class="evs">
         {#each evs.slice(0, MAX) as ev (ev.calendarId + ev.id)}
-          <EventChip event={ev} compact />
+          <EventChip event={ev} {day} compact />
         {/each}
         {#if evs.length > MAX}<span class="more">+{evs.length - MAX}</span>{/if}
       </span>

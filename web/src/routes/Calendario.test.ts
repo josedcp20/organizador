@@ -63,7 +63,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (url: string) => {
     const path = new URL(url).pathname;
     if (path === '/api/calendars') return json({ calendars: [CAL] });
-    if (path === '/api/events') return events();
+    if (path === '/api/agenda') return events();
     throw new Error(`fetch inesperado: ${path}`);
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -86,8 +86,8 @@ describe('Calendario', () => {
     expect(await screen.findByText('Dentista')).toBeTruthy();
     expect(screen.getByText('Mio')).toBeTruthy();
     expect(screen.getByRole('img', { name: 'Creado en la app' })).toBeTruthy();
-    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/events'))!;
-    expect(String(call[0])).toMatch(/\/api\/events\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/);
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/agenda'))!;
+    expect(String(call[0])).toMatch(/\/api\/agenda\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/);
   });
 
   it('filtro "Creados en la app" oculta eventos de la app', async () => {
@@ -145,7 +145,7 @@ describe('Calendario', () => {
     fetchMock.mockImplementation(async (url: string) => {
       const path = new URL(url).pathname;
       if (path === '/api/calendars') return json({ calendars: [CAL] });
-      if (path === '/api/events') return new Promise<Response>((res) => pending.push(res));
+      if (path === '/api/agenda') return new Promise<Response>((res) => pending.push(res));
       throw new Error(`fetch inesperado: ${path}`);
     });
     render(Calendario);
@@ -164,7 +164,7 @@ describe('Calendario', () => {
 
   it('visibilitychange recarga el rango y se quita el listener al desmontar', async () => {
     const count = () =>
-      fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/events')).length;
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/agenda')).length;
     const { unmount } = render(Calendario);
     await waitFor(() => expect(count()).toBe(1));
     document.dispatchEvent(new Event('visibilitychange'));
@@ -172,6 +172,25 @@ describe('Calendario', () => {
     unmount();
     document.dispatchEvent(new Event('visibilitychange'));
     await new Promise((r) => setTimeout(r, 20));
+    expect(count()).toBe(2);
+  });
+
+  it('una carga fallida por red hace UNA peticion (sin bucle); Reintentar hace otra', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path === '/api/calendars') return json({ calendars: [CAL] });
+      if (path === '/api/agenda') throw new TypeError('Failed to fetch');
+      throw new Error(`fetch inesperado: ${path}`);
+    });
+    const count = () =>
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/agenda')).length;
+    render(Calendario);
+    const retry = await screen.findByRole('button', { name: 'Reintentar' });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(count()).toBe(1);
+    await fireEvent.click(retry);
+    await screen.findByRole('button', { name: 'Reintentar' });
+    await new Promise((r) => setTimeout(r, 300));
     expect(count()).toBe(2);
   });
 });

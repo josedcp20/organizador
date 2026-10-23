@@ -171,7 +171,7 @@ export interface SyncResult {
   deleted: number;
 }
 
-/** Evento tal y como lo ve la app (`GET /api/events`, `GET /api/today`). Siempre leido de D1. */
+/** Evento tal y como lo ve la app (`GET /api/agenda`, `GET /api/today`). Siempre leido de D1. */
 export interface EventInfo {
   /** Id de Google del evento (instancia si es recurrente). */
   id: string;
@@ -212,7 +212,7 @@ export interface EventPending {
   error: string | null;
 }
 
-/** `GET /api/events?from=YYYY-MM-DD&to=YYYY-MM-DD` (rango inclusivo, fechas de Europe/Madrid). */
+/** `GET /api/agenda?from=YYYY-MM-DD&to=YYYY-MM-DD` (rango inclusivo, fechas de Europe/Madrid). */
 export interface EventsResponse {
   from: string;
   to: string;

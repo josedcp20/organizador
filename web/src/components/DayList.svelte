@@ -23,7 +23,7 @@
     <section class="day" class:today={day === today} aria-label={formatDayLong(day)}>
       <h3>{formatDayLong(day)}{day === today ? ' · hoy' : ''}</h3>
       {#each byDay.get(day) ?? [] as ev (ev.calendarId + ev.id)}
-        <EventChip event={ev} />
+        <EventChip event={ev} {day} />
       {:else}
         <p class="none">Sin eventos</p>
       {/each}

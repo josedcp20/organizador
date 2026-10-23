@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { addDaysToDateStr } from '@organizador/shared';
   import type { CalendarInfo, EventInfo } from '@organizador/shared';
-    import { fetchCalendars } from '../lib/calendars';
+  import { fetchCalendars } from '../lib/calendars';
   import { apiErrorMessage } from '../lib/google';
   import {
     defaultView,
@@ -61,6 +61,8 @@
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
       today = todayMadrid();
+      // Con error visible no se reintenta solo: el usuario pulsa "Reintentar".
+      if (error) return;
       void load(view, anchor);
     };
     document.addEventListener('visibilitychange', onVisible);
@@ -89,7 +91,11 @@
   }
 
   $effect(() => {
-    void load(view, anchor);
+    // Unicas dependencias: view y anchor. Todo lo que lee/escribe load() va fuera del seguimiento
+    // para que un fallo (error/loading) nunca re-dispare la carga.
+    const v = view;
+    const a = anchor;
+    untrack(() => void load(v, a));
     return () => ctrl?.abort();
   });
 

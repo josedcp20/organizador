@@ -91,6 +91,23 @@ export function mapEvent(e: EventInfo): CalEvent | null {
   };
 }
 
+/**
+ * Hora de un evento CON hora para el dia `day` en que se pinta (mismo criterio que
+ * `formatEventTime` de today.ts). Dia completo -> ''. Compacto: solo la hora de inicio si empieza
+ * ese dia; en los demas dias de un multi-dia, vacio.
+ */
+export function eventTimeLabel(e: CalEvent, day?: string, compact = false): string {
+  if (e.allDay || !e.startTime) return '';
+  if (day && e.multiDay) {
+    if (e.startDay < day && e.endDay > day) return compact ? '' : 'Todo el día';
+    if (e.startDay < day && e.endDay === day) {
+      return compact || !e.endTime ? '' : `hasta ${e.endTime}`;
+    }
+    if (e.startDay === day && e.endDay > day) return compact ? e.startTime : `desde ${e.startTime}`;
+  }
+  return compact || !e.endTime ? e.startTime : `${e.startTime} - ${e.endTime}`;
+}
+
 export function mapEvents(list: EventInfo[]): CalEvent[] {
   const out: CalEvent[] = [];
   for (const e of list) {
@@ -235,5 +252,5 @@ export function fetchEvents(
   to: string,
   signal?: AbortSignal,
 ): Promise<EventsResponse> {
-  return apiFetch<EventsResponse>(`/api/events?from=${from}&to=${to}`, { signal });
+  return apiFetch<EventsResponse>(`/api/agenda?from=${from}&to=${to}`, { signal });
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { EventInfo } from '@organizador/shared';
 import {
   mapEvent,
+  eventTimeLabel,
   filterEvents,
   groupByDay,
   visibleRange,
@@ -168,5 +169,32 @@ describe('rangos y navegacion', () => {
     expect(defaultView(390)).toBe('agenda');
     expect(defaultView(699)).toBe('agenda');
     expect(defaultView(700)).toBe('month');
+  });
+});
+
+describe('eventTimeLabel', () => {
+  const base = mapEvent(ev())!;
+  const multi = {
+    ...base,
+    allDay: false,
+    multiDay: true,
+    startDay: '2026-10-20',
+    endDay: '2026-10-22',
+    startTime: '22:00',
+    endTime: '08:30',
+  };
+  it('un solo dia: rango u hora si compacto', () => {
+    const one = { ...multi, multiDay: false, endDay: '2026-10-20' };
+    expect(eventTimeLabel(one, '2026-10-20')).toBe('22:00 - 08:30');
+    expect(eventTimeLabel(one, '2026-10-20', true)).toBe('22:00');
+  });
+  it('multi-dia ajusta por dia', () => {
+    expect(eventTimeLabel(multi, '2026-10-20')).toBe('desde 22:00');
+    expect(eventTimeLabel(multi, '2026-10-21')).toBe('Todo el día');
+    expect(eventTimeLabel(multi, '2026-10-22')).toBe('hasta 08:30');
+    expect(eventTimeLabel(multi, '2026-10-21', true)).toBe('');
+  });
+  it('dia completo -> vacio', () => {
+    expect(eventTimeLabel({ ...multi, allDay: true, startTime: null }, '2026-10-21')).toBe('');
   });
 });

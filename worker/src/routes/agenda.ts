@@ -12,7 +12,7 @@ import { errorBody } from '../errors';
 import { DEFAULT_TZ } from '../sync/window';
 
 /** Lectura de eventos SOLO desde D1 (protegido por el middleware Bearer de /api/*). */
-export const events = new Hono<{ Bindings: Env }>();
+export const agenda = new Hono<{ Bindings: Env }>();
 
 /** Rango maximo (dias, ambos extremos incluidos). */
 export const MAX_RANGE_DAYS = 400;
@@ -34,7 +34,7 @@ const tzOf = (env: Env) => env.TZ || DEFAULT_TZ;
 
 const dayNumber = (s: string) => Math.floor(Date.parse(`${s}T00:00:00Z`) / 86_400_000);
 
-events.get('/api/events', async (c) => {
+agenda.get('/api/agenda', async (c) => {
   const from = c.req.query('from');
   const to = c.req.query('to');
   if (!isRealDate(from) || !isRealDate(to)) {
@@ -55,7 +55,7 @@ events.get('/api/events', async (c) => {
   return c.json(body);
 });
 
-events.get('/api/events/:calendarId/:eventId', async (c) => {
+agenda.get('/api/agenda/:calendarId/:eventId', async (c) => {
   const event = await getEventById(c.env.DB, c.req.param('calendarId'), c.req.param('eventId'), {
     tz: tzOf(c.env),
   });
@@ -64,7 +64,7 @@ events.get('/api/events/:calendarId/:eventId', async (c) => {
   return c.json(event);
 });
 
-events.get('/api/today', async (c) => {
+agenda.get('/api/today', async (c) => {
   const tz = tzOf(c.env);
   const nowMs = now();
   const today = formatDateInTz(new Date(nowMs), tz);

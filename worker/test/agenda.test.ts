@@ -34,7 +34,7 @@ async function allDay(cal: string, id: string, start: string, endExclusive: stri
     .run();
 }
 
-const get = (q: string) => call(`/api/events${q}`, { ip });
+const get = (q: string) => call(`/api/agenda${q}`, { ip });
 const ids = (r: EventsResponse) => r.events.map((e) => e.id);
 
 beforeEach(async () => {
@@ -50,9 +50,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('GET /api/events', () => {
+describe('GET /api/agenda', () => {
   it('401 sin token en events y today', async () => {
-    for (const p of ['/api/events?from=2026-10-01&to=2026-10-02', '/api/today']) {
+    for (const p of ['/api/agenda?from=2026-10-01&to=2026-10-02', '/api/today']) {
       expect((await call(p, { ip, auth: null })).status).toBe(401);
     }
   });
@@ -210,7 +210,7 @@ describe('GET /api/today', () => {
   });
 });
 
-describe('GET /api/events: ano valido', () => {
+describe('GET /api/agenda: ano valido', () => {
   it.each([
     ['?from=1969-12-31&to=1970-01-02'],
     ['?from=2099-12-30&to=2101-01-01'],
@@ -227,12 +227,12 @@ describe('GET /api/events: ano valido', () => {
   });
 });
 
-describe('GET /api/events/:calendarId/:eventId', () => {
+describe('GET /api/agenda/:calendarId/:eventId', () => {
   const one = (cal: string, id: string) =>
-    call(`/api/events/${encodeURIComponent(cal)}/${encodeURIComponent(id)}`, { ip });
+    call(`/api/agenda/${encodeURIComponent(cal)}/${encodeURIComponent(id)}`, { ip });
 
   it('401 sin token', async () => {
-    expect((await call('/api/events/a%40x/e1', { ip, auth: null })).status).toBe(401);
+    expect((await call('/api/agenda/a%40x/e1', { ip, auth: null })).status).toBe(401);
   });
 
   it('devuelve el evento con la misma forma que la lista', async () => {

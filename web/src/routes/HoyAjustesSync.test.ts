@@ -145,6 +145,28 @@ describe('Ajustes: sync', () => {
     expect(await screen.findByText(/Espera un minuto/)).toBeTruthy();
   });
 
+  it('Sincronizar ahora: tras 429 se deshabilita con cuenta atras de 60 s', async () => {
+    routes['POST /api/sync'] = () => json({ error: { code: 'rate_limited', message: 'x' } }, 429);
+    render(Ajustes);
+    const btn = await screen.findByRole('button', { name: 'Sincronizar ahora' });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      await fireEvent.click(btn);
+      await screen.findByText(/Espera un minuto/);
+      const waiting = (await screen.findByRole('button', {
+        name: 'Espera 60s',
+      })) as HTMLButtonElement;
+      expect(waiting.disabled).toBe(true);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(screen.getByRole('button', { name: 'Espera 55s' })).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(55_000);
+      const again = screen.getByRole('button', { name: 'Sincronizar ahora' }) as HTMLButtonElement;
+      expect(again.disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('Sincronizar ahora: ok refresca', async () => {
     routes['POST /api/sync'] = () => json({ status: 'ok' });
     render(Ajustes);

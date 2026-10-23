@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { CALENDAR_PALETTE, isHexColor } from '@organizador/shared';
-  import type { CalendarInfo, GoogleStatus, SyncResult } from '@organizador/shared';
+  import type { CalendarInfo, GoogleStatus } from '@organizador/shared';
   import { session, meInfo } from '../lib/auth';
   import { ApiError, logout } from '../lib/api';
   import Banner from '../components/Banner.svelte';
@@ -67,15 +67,15 @@
     syncing = true;
     syncMsg = null;
     try {
-      const res = (await syncNow()) as Partial<SyncResult> | null;
+      const res = await syncNow();
       calendars = (await fetchCalendars()).calendars;
-      const withErrors = (res?.failed ?? 0) > 0 || (res?.partial ?? 0) > 0;
+      const withErrors = res.failed > 0 || res.partial > 0;
       syncMsg = withErrors
         ? { kind: 'error', text: 'Sincronización completada con errores.' }
         : { kind: 'ok', text: 'Sincronización completada.' };
     } catch (e) {
       syncMsg = { kind: 'error', text: syncErrorMessage(e) };
-      if (e instanceof ApiError && e.status === 429) startCooldown(e.retryAfter ?? 60);
+      if (e instanceof ApiError && e.status === 429) startCooldown(60);
       // Aunque falle, refresca la lista por si el estado cambio (p. ej. sync_busy).
       try {
         calendars = (await fetchCalendars()).calendars;
@@ -316,7 +316,7 @@
         {calRefreshing ? 'Actualizando...' : 'Actualizar desde Google'}
       </button>
       <button type="button" class="primary" disabled={syncing || calLoading || cooldown > 0} onclick={syncAndReload}>
-        {syncing ? 'Sincronizando...' : cooldown > 0 ? `Sincronizar ahora (${cooldown} s)` : 'Sincronizar ahora'}
+        {syncing ? 'Sincronizando...' : cooldown > 0 ? `Espera ${cooldown}s` : 'Sincronizar ahora'}
       </button>
       {#if syncMsg}
         <p class={`notice ${syncMsg.kind}`} role={syncMsg.kind === 'ok' ? 'status' : 'alert'}>
