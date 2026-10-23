@@ -156,6 +156,8 @@ describe('Ajustes: sync', () => {
     let release!: (r: Response) => void;
     routes['POST /api/sync'] = () => new Promise<Response>((res) => (release = res)) as never;
     render(Ajustes);
+    // Espera a que la lista de calendarios cargue antes de pulsar (evita carrera en CI).
+    await screen.findByRole('switch', { name: 'Mostrar Personal' });
     await fireEvent.click(await screen.findByRole('button', { name: 'Sincronizar ahora' }));
     const sw = screen.getByRole('switch', { name: 'Mostrar Personal' }) as HTMLInputElement;
     expect(sw.disabled).toBe(true);
