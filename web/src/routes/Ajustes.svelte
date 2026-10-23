@@ -1,10 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { CALENDAR_PALETTE, isHexColor } from '@organizador/shared';
-  import type { CalendarInfo, GoogleStatus } from '@organizador/shared';
+  import type { CalendarInfo, GoogleStatus, SyncResult } from '@organizador/shared';
   import { session, meInfo } from '../lib/auth';
   import { ApiError, logout } from '../lib/api';
-  import { fetchCalendars, patchCalendar, refreshCalendars } from '../lib/calendars';
+  import Banner from '../components/Banner.svelte';
+  import {
+    duplicateColors,
+    fetchCalendars,
+    formatAgo,
+    patchCalendar,
+    refreshCalendars,
+    syncErrorMessage,
+    syncNow,
+  } from '../lib/calendars';
   import {
     apiErrorMessage,
     connectErrorMessage,
@@ -34,6 +43,49 @@
   let calError = $state('');
   let calRefreshing = $state(false);
   let calNotice = $state('');
+  let syncing = $state(false);
+  let syncMsg = $state<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  const duplicates = $derived([...duplicateColors(calendars).values()]);
+
+  /** Segundos restantes tras un 429 (el boton queda deshabilitado con cuenta atras). */
+  let cooldown = $state(0);
+  let cooldownTimer: ReturnType<typeof setInterval> | undefined;
+
+  function startCooldown(seconds: number) {
+    clearInterval(cooldownTimer);
+    cooldown = seconds;
+    cooldownTimer = setInterval(() => {
+      cooldown -= 1;
+      if (cooldown <= 0) {
+        cooldown = 0;
+        clearInterval(cooldownTimer);
+      }
+    }, 1000);
+  }
+
+  async function syncAndReload() {
+    syncing = true;
+    syncMsg = null;
+    try {
+      const res = (await syncNow()) as Partial<SyncResult> | null;
+      calendars = (await fetchCalendars()).calendars;
+      const withErrors = (res?.failed ?? 0) > 0 || (res?.partial ?? 0) > 0;
+      syncMsg = withErrors
+        ? { kind: 'error', text: 'Sincronización completada con errores.' }
+        : { kind: 'ok', text: 'Sincronización completada.' };
+    } catch (e) {
+      syncMsg = { kind: 'error', text: syncErrorMessage(e) };
+      if (e instanceof ApiError && e.status === 429) startCooldown(e.retryAfter ?? 60);
+      // Aunque falle, refresca la lista por si el estado cambio (p. ej. sync_busy).
+      try {
+        calendars = (await fetchCalendars()).calendars;
+      } catch {
+        // se mantiene la lista actual
+      }
+    } finally {
+      syncing = false;
+    }
+  }
 
   function calendarsErrorMessage(e: unknown): string {
     if (e instanceof ApiError && e.code === 'google_not_connected') {
@@ -162,6 +214,10 @@
   }
 
   onMount(() => {
+    return () => clearInterval(cooldownTimer);
+  });
+
+  onMount(() => {
     // Leer y limpiar `?google=...` del hash antes de cualquier peticion.
     const result = takeGoogleResult();
     if (result) {
@@ -248,8 +304,8 @@
     <section class="calendars" aria-labelledby="cal-title" aria-busy={calLoading || calRefreshing}>
       <h2 id="cal-title">Calendarios</h2>
       <p class="muted hint">
-        Los eventos se sincronizan en ambos sentidos con Google; los colores y la visibilidad se
-        quedan solo en la app.
+        Los eventos se sincronizan en ambos sentidos con Google; notas, avisos y colores se quedan
+        solo en la app.
       </p>
       <button
         type="button"
@@ -259,6 +315,20 @@
       >
         {calRefreshing ? 'Actualizando...' : 'Actualizar desde Google'}
       </button>
+      <button type="button" class="primary" disabled={syncing || calLoading || cooldown > 0} onclick={syncAndReload}>
+        {syncing ? 'Sincronizando...' : cooldown > 0 ? `Sincronizar ahora (${cooldown} s)` : 'Sincronizar ahora'}
+      </button>
+      {#if syncMsg}
+        <p class={`notice ${syncMsg.kind}`} role={syncMsg.kind === 'ok' ? 'status' : 'alert'}>
+          {syncMsg.text}
+        </p>
+      {/if}
+      {#each duplicates as names (names.join('|'))}
+        <Banner kind="warning">
+          Estos calendarios comparten el mismo color: {names.join(', ')}. Cambia uno para
+          distinguirlos.
+        </Banner>
+      {/each}
       {#if calNotice}
         <p class="notice ok" role="status">{calNotice}</p>
       {/if}
@@ -285,12 +355,19 @@
                     type="checkbox"
                     role="switch"
                     checked={cal.visible}
+                    disabled={syncing}
                     aria-label={`Mostrar ${cal.name}`}
                     onchange={(e) => saveCalendar(cal, { visible: e.currentTarget.checked })}
                   />
                   <span class="muted">{cal.visible ? 'Visible' : 'Oculto'}</span>
                 </label>
               </div>
+              <p class="muted sync-line">
+                Última sync: {formatAgo(cal.lastSyncedAt)}
+              </p>
+              {#if cal.lastSyncError}
+                <p class="notice error" role="alert">Error de sincronización: {cal.lastSyncError}</p>
+              {/if}
               <div class="swatches" role="group" aria-label={`Color de ${cal.name}`}>
                 {#each CALENDAR_PALETTE as color (color)}
                   <button
@@ -299,6 +376,7 @@
                     class:selected={cal.color.toLowerCase() === color}
                     style:background-color={color}
                     aria-label={`Color ${color} para ${cal.name}`}
+                    disabled={syncing}
                     aria-pressed={cal.color.toLowerCase() === color}
                     onclick={() => saveCalendar(cal, { color })}
                   ></button>
@@ -308,6 +386,7 @@
                   <input
                     type="color"
                     value={cal.color}
+                    disabled={syncing}
                     aria-label={`Color personalizado para ${cal.name}`}
                     onchange={(e) => saveCalendar(cal, { color: e.currentTarget.value })}
                   />
@@ -483,6 +562,11 @@
     border-color: #111;
     outline: 2px solid #fff;
     outline-offset: -4px;
+  }
+
+  .sync-line {
+    margin: 0.3rem 0 0;
+    font-size: 0.85rem;
   }
 
   .custom {
