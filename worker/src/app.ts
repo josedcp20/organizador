@@ -5,6 +5,7 @@ import { errorBody } from './errors';
 import { auth } from './middleware/auth';
 import { cors } from './middleware/cors';
 import { calendars } from './routes/calendars';
+import { events } from './routes/events';
 import { me } from './routes/me';
 import { oauth } from './routes/oauth';
 import { sync } from './routes/sync';
@@ -20,6 +21,7 @@ app.get('/api/health', (c) => c.json({ ok: true, version: getVersion(c.env) }));
 app.route('/', me);
 app.route('/', oauth);
 app.route('/', calendars);
+app.route('/', events);
 app.route('/', sync);
 
 app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));

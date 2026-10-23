@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setClock } from '../src/clock';
 import { toBase64Url } from '../src/crypto/encoding';
 import type { Env } from '../src/env';
-import { eventsPath, googleRequest, isAllowedRequest } from '../src/google/calendarApi';
+import {
+  eventsPath,
+  googleRequest,
+  isAllowedRequest,
+  type GoogleMethod,
+} from '../src/google/calendarApi';
 import { importCalendars } from '../src/google/calendarList';
 import {
   GOOGLE_SCOPES,
@@ -376,7 +381,16 @@ describe('rutas /api/calendars', () => {
       ['c@x', true, 'writer', true],
     ]);
     expect(Object.keys(list[0]!).sort()).toEqual(
-      ['accessRole', 'color', 'id', 'name', 'visible', 'writable'].sort(),
+      [
+        'accessRole',
+        'color',
+        'id',
+        'lastSyncError',
+        'lastSyncedAt',
+        'name',
+        'visible',
+        'writable',
+      ].sort(),
     );
     const get = await call('/api/calendars');
     expect(((await get.json()) as { calendars: unknown[] }).calendars).toHaveLength(3);
@@ -474,19 +488,31 @@ describe('googleRequest (allowlist)', () => {
     ['PUT', 'users/me/calendarList'],
     ['GET', 'users/me/calendarList/x'],
     ['GET', '../../oauth2/v1/userinfo'],
-    // Escrituras de eventos: llegan en T2.10, hoy prohibidas.
-    ['POST', 'calendars/primary/events'],
+    // Escrituras fuera de la allowlist de T2.10 (insert/patch/delete de UN evento; ver
+    // test/eventsWrite.test.ts para las permitidas).
     ['PATCH', 'calendars/primary/events'],
     ['PUT', 'calendars/primary/events'],
+    ['PUT', 'calendars/primary/events/e1'],
     ['DELETE', 'calendars/primary/events'],
-    ['PATCH', 'calendars/primary/events/e1'],
-    ['DELETE', 'calendars/primary/events/e1'],
+    ['POST', 'calendars/primary/events/e1'],
     ['POST', 'calendars/primary/events/quickAdd'],
     ['POST', 'calendars/primary/events/import'],
     ['POST', 'calendars/primary/events/e1/move'],
     ['POST', 'calendars/primary/events/watch'],
+    ['PATCH', 'calendars/primary/events/quickAdd'],
+    ['PATCH', 'calendars/primary/events/IMPORT'],
+    ['DELETE', 'calendars/primary/events/watch'],
+    ['PATCH', 'calendars/primary/events/e1/move'],
+    ['DELETE', 'calendars/primary/events/..'],
+    ['DELETE', 'calendars/primary/events/%2E'],
+    ['PATCH', 'calendars/primary/events/e1?x=1'],
+    ['DELETE', 'calendars/primary/events/'],
+    ['POST', 'calendars/primary/acl'],
+    ['DELETE', 'calendars/primary/acl/user:x'],
+    ['POST', 'calendars'],
+    ['POST', 'users/me/calendarList/x'],
     // Otras lecturas no previstas y rutas maliciosas.
-    ['GET', 'calendars/primary/events/e1'],
+    ['GET', 'calendars/primary/events/import'],
     ['GET', 'calendars/primary/events/e1/instances'],
     ['GET', 'calendars/primary'],
     ['GET', 'calendars/primary/acl'],
@@ -501,7 +527,9 @@ describe('googleRequest (allowlist)', () => {
     ['GET', '/calendars/primary/events'],
     ['DELETE', 'calendars/primary'],
   ] as const)('rechaza %s %s sin hacer red', async (method, path) => {
-    await expect(googleRequest(method, path, { token: 't' })).rejects.toThrow(/not_allowed/);
+    await expect(googleRequest(method as GoogleMethod, path, { token: 't' })).rejects.toThrow(
+      /not_allowed/,
+    );
     expect(requests).toHaveLength(0);
   });
 });

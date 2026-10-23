@@ -133,6 +133,10 @@ export interface CalendarInfo {
   accessRole: string | null;
   /** true solo para owner/writer. */
   writable: boolean;
+  /** Fin (ISO UTC) de la ultima sincronizacion correcta, o null si nunca. */
+  lastSyncedAt: string | null;
+  /** Ultimo error de sync (codigo corto, sin datos sensibles) o null. */
+  lastSyncError: string | null;
 }
 
 /** `GET /api/calendars` y `POST /api/calendars/refresh` */
@@ -165,4 +169,60 @@ export interface SyncResult {
   requests: number;
   upserted: number;
   deleted: number;
+}
+
+/** Evento tal y como lo ve la app (`GET /api/events`, `GET /api/today`). Siempre leido de D1. */
+export interface EventInfo {
+  /** Id de Google del evento (instancia si es recurrente). */
+  id: string;
+  calendarId: string;
+  /**
+   * Color efectivo (#rrggbb): color propio del evento > (origin='app' ? color de eventos de la app :
+   * color del calendario) > color de Google.
+   */
+  color: string;
+  status: 'confirmed' | 'tentative';
+  summary: string | null;
+  location: string | null;
+  description: string | null;
+  allDay: boolean;
+  /** ISO UTC; solo eventos con hora. */
+  startAt: string | null;
+  endAt: string | null;
+  /** YYYY-MM-DD; solo eventos de dia completo. `endDate` es EXCLUSIVO (como en Google). */
+  startDate: string | null;
+  endDate: string | null;
+  recurringEventId: string | null;
+  htmlLink: string | null;
+  origin: 'google' | 'app';
+  /** Datos locales (event_meta, instancia > serie > defecto). Nunca van a Google. */
+  notes: string;
+  remind: boolean;
+  remindDaysBefore: number;
+  /** El calendario permite escribir (accessRole owner/writer). */
+  writable: boolean;
+  /** Inicio anterior a la ventana de sync (hoy - 1 mes, Madrid): el sync ya no lo actualiza. */
+  frozen: boolean;
+  /** Escritura a Google sin confirmar (con el ultimo error, si lo hubo); null si esta sincronizado. */
+  pending: EventPending | null;
+}
+
+export interface EventPending {
+  op: 'insert' | 'patch' | 'delete';
+  error: string | null;
+}
+
+/** `GET /api/events?from=YYYY-MM-DD&to=YYYY-MM-DD` (rango inclusivo, fechas de Europe/Madrid). */
+export interface EventsResponse {
+  from: string;
+  to: string;
+  events: EventInfo[];
+}
+
+/** `GET /api/today`: hoy y manana (Europe/Madrid). Un evento multi-dia aparece en cada dia que toca. */
+export interface TodayResponse {
+  today: string;
+  tomorrow: string;
+  todayEvents: EventInfo[];
+  tomorrowEvents: EventInfo[];
 }

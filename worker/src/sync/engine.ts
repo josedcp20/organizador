@@ -163,15 +163,37 @@ const LOCAL_ID_EXPR =
   'CASE WHEN ?18 IS NULL OR EXISTS (SELECT 1 FROM events e2 WHERE e2.local_id = ?18 ' +
   'AND NOT (e2.calendar_id = ?1 AND e2.id = ?2)) THEN NULL ELSE ?18 END';
 
+/**
+ * Campos de Google del upsert. No retroceden: si la fila ya tiene un `updated` POSTERIOR al del
+ * lote (p. ej. una escritura de la app confirmada mientras el lote estaba en vuelo), conserva su
+ * valor. Se hace por columna (y no en el WHERE) para que `sync_run` SI se refresque: la fila fue
+ * vista en esta pasada y la purga de fin de pasada completa no debe borrarla.
+ */
+const UPSERT_DATA_COLS = [
+  'recurring_event_id',
+  'status',
+  'summary',
+  'location',
+  'description',
+  'all_day',
+  'start_at',
+  'end_at',
+  'start_date',
+  'end_date',
+  'html_link',
+  'updated',
+  'etag',
+  'original_start',
+];
+const keepNewer = (col: string) =>
+  `CASE WHEN events.updated IS NULL OR excluded.updated IS NULL ` +
+  `OR events.updated <= excluded.updated THEN excluded.${col} ELSE events.${col} END`;
+
 const UPSERT_SQL = `INSERT INTO events (${EVENT_COLS})
   SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ${LOCAL_ID_EXPR}, ?19
   WHERE ${fence(20)}
   ON CONFLICT(calendar_id, id) DO UPDATE SET
-    recurring_event_id = excluded.recurring_event_id, status = excluded.status,
-    summary = excluded.summary, location = excluded.location, description = excluded.description,
-    all_day = excluded.all_day, start_at = excluded.start_at, end_at = excluded.end_at,
-    start_date = excluded.start_date, end_date = excluded.end_date, html_link = excluded.html_link,
-    updated = excluded.updated, etag = excluded.etag, original_start = excluded.original_start,
+    ${UPSERT_DATA_COLS.map((c) => `${c} = ${keepNewer(c)}`).join(', ')},
     origin = CASE WHEN excluded.origin = 'app' THEN 'app' ELSE events.origin END,
     local_id = COALESCE(events.local_id, excluded.local_id),
     sync_run = COALESCE(excluded.sync_run, events.sync_run)
@@ -188,6 +210,7 @@ const UPDATE_PAST_SQL = `UPDATE events SET
     local_id = COALESCE(local_id, ${LOCAL_ID_EXPR}),
     sync_run = COALESCE(?19, sync_run)
   WHERE calendar_id = ?1 AND id = ?2 AND pending_op IS NULL
+    AND (updated IS NULL OR ?14 IS NULL OR updated <= ?14)
     AND NOT ${frozen('', 21, 22)} AND ${fence(20)}`;
 
 const DELETE_ONE_SQL = `DELETE FROM events

@@ -7,6 +7,8 @@ interface CalendarRow {
   color: string | null;
   enabled: number;
   access_role: string | null;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
 }
 
 export function isWritableRole(role: string | null): boolean {
@@ -21,10 +23,13 @@ function toInfo(r: CalendarRow): CalendarInfo {
     visible: r.enabled === 1,
     accessRole: r.access_role,
     writable: isWritableRole(r.access_role),
+    lastSyncedAt: r.last_synced_at,
+    lastSyncError: r.last_sync_error,
   };
 }
 
-const COLS = 'id, summary, google_color, color, enabled, access_role';
+const COLS =
+  'id, summary, google_color, color, enabled, access_role, last_synced_at, last_sync_error';
 
 /** Calendarios presentes en Google (los desaparecidos quedan en D1 marcados con removed_at). */
 export async function listCalendars(db: D1Database): Promise<CalendarInfo[]> {
