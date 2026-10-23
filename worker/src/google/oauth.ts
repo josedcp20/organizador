@@ -429,6 +429,18 @@ export async function getAccessToken(env: Env, nowMs: number = now()): Promise<s
   return tokens.access_token;
 }
 
+/**
+ * Olvida el access token cacheado (Google lo rechazo con 401): el siguiente uso lo renueva con el
+ * refresh token. No desconecta.
+ */
+export async function forgetAccessToken(db: D1Database): Promise<void> {
+  await db
+    .prepare(
+      'UPDATE google_auth SET access_token = NULL, access_token_expires_at = NULL WHERE id = 1',
+    )
+    .run();
+}
+
 /** Estado para `GET /api/google/status` (y, mas adelante, banner y /api/me). */
 export async function getGoogleStatus(env: Env): Promise<GoogleStatus> {
   const [cfg, row] = await Promise.all([loadOAuthConfig(env), readRow(env.DB)]);

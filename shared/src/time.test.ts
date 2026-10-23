@@ -6,6 +6,8 @@ import {
   getEndOfDayInTz,
   addDaysInTz,
   addDaysToDateStr,
+  addMonthsToDateStr,
+  startOfDateInTz,
 } from './time';
 
 const MAD = 'Europe/Madrid';
@@ -135,5 +137,38 @@ describe('time utilities', () => {
         expect(compute()).toEqual(expected);
       });
     }
+  });
+});
+
+describe('addMonthsToDateStr', () => {
+  it('suma y resta meses cruzando anios', () => {
+    expect(addMonthsToDateStr('2026-10-23', -1)).toBe('2026-09-23');
+    expect(addMonthsToDateStr('2026-10-23', 12)).toBe('2027-10-23');
+    expect(addMonthsToDateStr('2026-01-15', -1)).toBe('2025-12-15');
+    expect(addMonthsToDateStr('2026-12-01', 1)).toBe('2027-01-01');
+  });
+
+  it('ajusta al ultimo dia del mes de destino', () => {
+    expect(addMonthsToDateStr('2026-03-31', -1)).toBe('2026-02-28');
+    expect(addMonthsToDateStr('2028-03-31', -1)).toBe('2028-02-29');
+    expect(addMonthsToDateStr('2027-02-28', 12)).toBe('2028-02-28');
+    expect(addMonthsToDateStr('2026-05-31', 12)).toBe('2027-05-31');
+  });
+});
+
+describe('startOfDateInTz', () => {
+  it('00:00 Madrid en invierno, verano y dias de cambio de hora', () => {
+    expect(startOfDateInTz('2026-01-15', 'Europe/Madrid').toISOString()).toBe(
+      '2026-01-14T23:00:00.000Z',
+    );
+    expect(startOfDateInTz('2026-07-15', 'Europe/Madrid').toISOString()).toBe(
+      '2026-07-14T22:00:00.000Z',
+    );
+    expect(startOfDateInTz('2026-03-29', 'Europe/Madrid').toISOString()).toBe(
+      '2026-03-28T23:00:00.000Z',
+    );
+    expect(startOfDateInTz('2026-10-25', 'Europe/Madrid').toISOString()).toBe(
+      '2026-10-24T22:00:00.000Z',
+    );
   });
 });

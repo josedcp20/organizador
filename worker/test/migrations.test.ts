@@ -52,6 +52,23 @@ describe('migraciones (aplicadas en test/setup.ts)', () => {
     }
   });
 
+  it('0003: estado de sync por calendario y run de la pasada completa en events', async () => {
+    const c = await columns('calendars');
+    for (const col of [
+      'sync_token',
+      'last_synced_at',
+      'sync_cursor',
+      'last_full_sync_at',
+      'last_sync_error',
+      'last_sync_error_at',
+      'sync_failures',
+      'sync_backoff_until',
+    ]) {
+      expect(c).toContain(col);
+    }
+    expect(await columns('events')).toContain('sync_run');
+  });
+
   it('event_meta tiene scope y color', async () => {
     const c = await columns('event_meta');
     expect(c).toContain('scope');

@@ -145,3 +145,24 @@ export interface CalendarPatch {
   color?: string;
   visible?: boolean;
 }
+
+/**
+ * Resultado de una pasada de sincronizacion Google -> D1 (`POST /api/sync`). Solo contadores y
+ * codigos: nunca ids de calendario ni datos de eventos.
+ */
+export interface SyncResult {
+  /** ok = se intento sincronizar; el resto = no se pudo empezar (sin llamadas a Calendar API). */
+  status: 'ok' | 'busy' | 'not_connected' | 'misconfigured' | 'unavailable' | 'auth_rejected';
+  /** Calendarios candidatos (visibles, presentes en Google, sin backoff activo). */
+  calendars: number;
+  /** Terminaron la pasada (incremental o completa) en esta ejecucion. */
+  completed: number;
+  /** Quedaron a medias por presupuesto (se reanudan en la siguiente ejecucion). */
+  partial: number;
+  /** Fallaron (motivo por calendario en D1: calendars.last_sync_error). */
+  failed: number;
+  /** Peticiones hechas a Calendar API. */
+  requests: number;
+  upserted: number;
+  deleted: number;
+}

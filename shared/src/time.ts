@@ -110,3 +110,19 @@ export function addDaysInTz(date: Date, days: number, tz: string = TZ): Date {
   const target = addDaysToDateStr(formatDateInTz(date, tz), days);
   return new Date(startOfLocalDateMs(target, tz));
 }
+
+/**
+ * Suma `months` meses de calendario a una fecha YYYY-MM-DD. Si el dia no existe en el mes de
+ * destino se ajusta al ultimo dia (31-mar - 1 mes = 28/29-feb). `months` puede ser negativo.
+ */
+export function addMonthsToDateStr(dateStr: string, months: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const targetMonth = m - 1 + months;
+  const lastDay = new Date(Date.UTC(y, targetMonth + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, targetMonth, Math.min(d, lastDay))).toISOString().slice(0, 10);
+}
+
+/** Instante UTC de las 00:00 locales de `dateStr` (YYYY-MM-DD) en `tz` (correcto en cambios de hora). */
+export function startOfDateInTz(dateStr: string, tz: string = TZ): Date {
+  return new Date(startOfLocalDateMs(dateStr, tz));
+}

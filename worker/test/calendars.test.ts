@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setClock } from '../src/clock';
 import { toBase64Url } from '../src/crypto/encoding';
 import type { Env } from '../src/env';
-import { googleRequest } from '../src/google/calendarApi';
+import { eventsPath, googleRequest, isAllowedRequest } from '../src/google/calendarApi';
 import { importCalendars } from '../src/google/calendarList';
 import {
   GOOGLE_SCOPES,
@@ -230,6 +230,64 @@ describe('importCalendars', () => {
     expect(c.color).not.toBe(a.color);
   });
 
+  it('regresion: un PATCH de color entre la lectura y el batch no hace repetir color al nuevo', async () => {
+    // Bug T2.3: el color del calendario nuevo se calculaba con la foto leida al empezar; si el
+    // usuario elegia ese color para otro calendario mientras tanto, el nuevo lo repetia.
+    await connect();
+    items = [cal('a@x')];
+    await importCalendars(fullEnv());
+    items = [cal('a@x'), cal('b@x')];
+    const realDb = env.DB;
+    const racingDb = new Proxy(realDb, {
+      get(target, prop, receiver) {
+        if (prop === 'batch') {
+          return async (stmts: D1PreparedStatement[]) => {
+            // El usuario elige el siguiente color libre (rojo) para a@x justo antes del batch.
+            await realDb
+              .prepare("UPDATE calendars SET color = ?1 WHERE id = 'a@x'")
+              .bind(CALENDAR_PALETTE[1])
+              .run();
+            return target.batch(stmts);
+          };
+        }
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+    });
+    await importCalendars({ ...fullEnv(), DB: racingDb });
+    const all = await rows();
+    expect(all.map((x) => x.color)).toEqual([CALENDAR_PALETTE[1], CALENDAR_PALETTE[0]]);
+    expect(new Set(all.map((x) => x.color)).size).toBe(2);
+  });
+
+  it('imports concurrentes con distinto orden no repiten colores', async () => {
+    await connect();
+    const five = ['a@x', 'b@x', 'c@x', 'd@x', 'e@x'];
+    items = five.map((id) => cal(id));
+    const reversed = [...items].reverse();
+    let n = 0;
+    const order = () => (n++ % 2 === 0 ? items : reversed);
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('calendarList')) return json({ items: order() });
+      throw new Error('inesperado');
+    });
+    await Promise.all([importCalendars(fullEnv()), importCalendars(fullEnv())]);
+    const colors = (await rows()).map((x) => x.color);
+    expect(colors).toHaveLength(5);
+    expect(new Set(colors).size).toBe(5);
+  });
+
+  it('colores en mayusculas guardados a mano cuentan como usados', async () => {
+    await connect();
+    items = [cal('a@x')];
+    await importCalendars(fullEnv());
+    await env.DB.prepare("UPDATE calendars SET color = '#1A73E8' WHERE id = 'a@x'").run();
+    items = [cal('a@x'), cal('b@x')];
+    await importCalendars(fullEnv());
+    expect((await rows())[1]!.color).toBe(CALENDAR_PALETTE[1]);
+  });
+
   it('sigue la paginacion', async () => {
     await connect();
     listPages = [[cal('p1@x')], [cal('p2@x')], [cal('p3@x')]];
@@ -400,14 +458,48 @@ describe('googleRequest (allowlist)', () => {
     });
   });
 
+  it('permite GET calendars/{id}/events (events.list, solo lectura) con id codificado', async () => {
+    expect(isAllowedRequest('GET', 'calendars/primary/events')).toBe(true);
+    expect(
+      isAllowedRequest('GET', eventsPath('es.spain#holiday@group.v.calendar.google.com')),
+    ).toBe(true);
+    expect(eventsPath('a/b@x')).toBe('calendars/a%2Fb%40x/events');
+    expect(isAllowedRequest('GET', eventsPath('a/b@x'))).toBe(true);
+  });
+
   it.each([
     ['POST', 'users/me/calendarList'],
     ['PATCH', 'users/me/calendarList'],
     ['DELETE', 'users/me/calendarList'],
     ['PUT', 'users/me/calendarList'],
-    ['GET', 'calendars/primary/events'],
     ['GET', 'users/me/calendarList/x'],
     ['GET', '../../oauth2/v1/userinfo'],
+    // Escrituras de eventos: llegan en T2.10, hoy prohibidas.
+    ['POST', 'calendars/primary/events'],
+    ['PATCH', 'calendars/primary/events'],
+    ['PUT', 'calendars/primary/events'],
+    ['DELETE', 'calendars/primary/events'],
+    ['PATCH', 'calendars/primary/events/e1'],
+    ['DELETE', 'calendars/primary/events/e1'],
+    ['POST', 'calendars/primary/events/quickAdd'],
+    ['POST', 'calendars/primary/events/import'],
+    ['POST', 'calendars/primary/events/e1/move'],
+    ['POST', 'calendars/primary/events/watch'],
+    // Otras lecturas no previstas y rutas maliciosas.
+    ['GET', 'calendars/primary/events/e1'],
+    ['GET', 'calendars/primary/events/e1/instances'],
+    ['GET', 'calendars/primary'],
+    ['GET', 'calendars/primary/acl'],
+    ['GET', 'calendars/a/b/events'],
+    ['GET', 'calendars//events'],
+    ['GET', 'calendars/../events'],
+    ['GET', 'calendars/./events'],
+    ['GET', 'calendars/%2e%2e/events'],
+    ['GET', 'calendars/x?y=1/events'],
+    ['GET', 'calendars/x#/events'],
+    ['GET', 'calendars/primary/events?alt=media'],
+    ['GET', '/calendars/primary/events'],
+    ['DELETE', 'calendars/primary'],
   ] as const)('rechaza %s %s sin hacer red', async (method, path) => {
     await expect(googleRequest(method, path, { token: 't' })).rejects.toThrow(/not_allowed/);
     expect(requests).toHaveLength(0);

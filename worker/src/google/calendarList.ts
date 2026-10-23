@@ -1,3 +1,4 @@
+import { CALENDAR_PALETTE } from '@organizador/shared';
 import { now } from '../clock';
 import { nextPaletteColor } from '../db/calendars';
 import type { Env } from '../env';
@@ -82,6 +83,22 @@ export async function listCalendarList(env: Env): Promise<GoogleCalendarEntry[]>
   throw new GoogleApiError(502);
 }
 
+/**
+ * Primer color de la paleta que no usa NINGUN calendario en el momento de escribir (subconsulta
+ * evaluada por cada sentencia del batch, que ve las anteriores). Asi no se repite color aunque un
+ * PATCH de color o un import concurrente cambien `calendars` entre la lectura y el batch. NULL si
+ * no queda ninguno libre (se usa entonces el de rotacion calculado en JS).
+ */
+const FREE_PALETTE_COLOR_SQL = (() => {
+  const values = CALENDAR_PALETTE.map((c, i) => {
+    if (!/^#[0-9a-f]{6}$/.test(c)) throw new Error('bad_palette');
+    return `('${c}', ${i})`;
+  }).join(', ');
+  return `(SELECT column1 FROM (VALUES ${values})
+    WHERE column1 NOT IN (SELECT lower(color) FROM calendars WHERE color IS NOT NULL)
+    ORDER BY column2 LIMIT 1)`;
+})();
+
 export interface ImportResult {
   added: number;
   updated: number;
@@ -126,7 +143,10 @@ export async function importCalendars(env: Env): Promise<ImportResult> {
         usedColors.push(color);
         stmts.push(
           db
-            .prepare('UPDATE calendars SET color = ?2 WHERE id = ?1 AND color IS NULL')
+            .prepare(
+              `UPDATE calendars SET color = COALESCE(${FREE_PALETTE_COLOR_SQL}, ?2)
+               WHERE id = ?1 AND color IS NULL`,
+            )
             .bind(e.id, color),
         );
       }
@@ -139,7 +159,7 @@ export async function importCalendars(env: Env): Promise<ImportResult> {
       db
         .prepare(
           `INSERT INTO calendars (id, summary, google_color, color, enabled, access_role, sort_order)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+           VALUES (?1, ?2, ?3, ${row ? '?4' : `COALESCE(${FREE_PALETTE_COLOR_SQL}, ?4)`}, ?5, ?6, ?7)
            ON CONFLICT(id) DO UPDATE SET summary = excluded.summary,
              google_color = excluded.google_color, access_role = excluded.access_role,
              sort_order = excluded.sort_order, removed_at = NULL`,
