@@ -34,6 +34,23 @@ const connected = {
   lastError: null,
 };
 
+const CAL_A = {
+  id: 'a@x',
+  name: 'Personal',
+  color: '#1a73e8',
+  visible: true,
+  accessRole: 'owner',
+  writable: true,
+};
+const CAL_B = {
+  id: 'b@x',
+  name: 'Compartido',
+  color: '#d93025',
+  visible: false,
+  accessRole: 'reader',
+  writable: false,
+};
+
 let fetchMock: ReturnType<typeof vi.fn>;
 let goSpy: ReturnType<typeof vi.spyOn>;
 let routes: Record<string, () => Response>;
@@ -43,7 +60,11 @@ function urlOf(call: unknown[]): string {
 }
 
 beforeEach(() => {
-  routes = { 'GET /api/google/status': () => json(disconnected()) };
+  routes = {
+    'GET /api/google/status': () => json(disconnected()),
+    'GET /api/calendars': () => json({ calendars: [CAL_A] }),
+    'POST /api/calendars/refresh': () => json({ calendars: [CAL_A] }),
+  };
   fetchMock = vi.fn(async (url: string, init?: Init) => {
     const key = `${init?.method ?? 'GET'} ${new URL(url).pathname}`;
     const handler = routes[key];
@@ -283,5 +304,162 @@ describe('Ajustes: seccion Google', () => {
     render(Ajustes);
     await fireEvent.click(await screen.findByRole('button', { name: 'Desconectar Google' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/no se pudo confirmar/);
+  });
+});
+
+describe('Ajustes: seccion Calendarios', () => {
+  const calls = (method: string, suffix: string) =>
+    fetchMock.mock.calls.filter(
+      (c) => ((c[1] as Init | undefined)?.method ?? 'GET') === method && urlOf(c).endsWith(suffix),
+    );
+
+  beforeEach(() => {
+    routes['GET /api/google/status'] = () => json(connected);
+  });
+
+  it('muestra lista con nombre, "solo lectura", interruptor y paleta', async () => {
+    routes['GET /api/calendars'] = () => json({ calendars: [CAL_A, CAL_B] });
+    render(Ajustes);
+    expect(await screen.findByText('Personal')).toBeTruthy();
+    expect(screen.getByText('Compartido')).toBeTruthy();
+    expect(screen.getAllByText('solo lectura')).toHaveLength(1);
+    const sw = screen.getByRole('switch', { name: 'Mostrar Personal' }) as HTMLInputElement;
+    expect(sw.checked).toBe(true);
+    expect(
+      (screen.getByRole('switch', { name: 'Mostrar Compartido' }) as HTMLInputElement).checked,
+    ).toBe(false);
+    expect(
+      screen
+        .getByRole('button', { name: 'Color #1a73e8 para Personal' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(screen.getByLabelText('Color personalizado para Personal')).toBeTruthy();
+    // No hay import automatico si ya hay calendarios.
+    expect(calls('POST', '/api/calendars/refresh')).toHaveLength(0);
+  });
+
+  it('cambiar color con un swatch llama a PATCH con Bearer y solo ese campo', async () => {
+    routes['PATCH /api/calendars/a%40x'] = () => json({ ...CAL_A, color: '#188038' });
+    render(Ajustes);
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Color #188038 para Personal' }),
+    );
+    await waitFor(() => expect(calls('PATCH', '/api/calendars/a%40x')).toHaveLength(1));
+    const [, init] = calls('PATCH', '/api/calendars/a%40x')[0] as [string, Init];
+    expect(JSON.parse(String(init.body))).toEqual({ color: '#188038' });
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok-123');
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole('button', { name: 'Color #188038 para Personal' })
+          .getAttribute('aria-pressed'),
+      ).toBe('true'),
+    );
+  });
+
+  it('color personalizado y visibilidad llaman a PATCH', async () => {
+    routes['PATCH /api/calendars/a%40x'] = () => json(CAL_A);
+    render(Ajustes);
+    const picker = (await screen.findByLabelText(
+      'Color personalizado para Personal',
+    )) as HTMLInputElement;
+    await fireEvent.change(picker, { target: { value: '#123456' } });
+    await waitFor(() => expect(calls('PATCH', '/api/calendars/a%40x')).toHaveLength(1));
+    expect(
+      JSON.parse(
+        String(((calls('PATCH', '/api/calendars/a%40x')[0] as unknown[])[1] as Init).body),
+      ),
+    ).toEqual({
+      color: '#123456',
+    });
+    await fireEvent.click(screen.getByRole('switch', { name: 'Mostrar Personal' }));
+    await waitFor(() => expect(calls('PATCH', '/api/calendars/a%40x')).toHaveLength(2));
+    expect(
+      JSON.parse(
+        String(((calls('PATCH', '/api/calendars/a%40x')[1] as unknown[])[1] as Init).body),
+      ),
+    ).toEqual({
+      visible: false,
+    });
+  });
+
+  it('si el PATCH falla muestra error y revierte', async () => {
+    routes['PATCH /api/calendars/a%40x'] = () => json({ error: { code: 'x', message: 'x' } }, 500);
+    render(Ajustes);
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Color #188038 para Personal' }),
+    );
+    expect((await screen.findByRole('alert')).textContent).toMatch(/No se pudo guardar/);
+    expect(
+      screen
+        .getByRole('button', { name: 'Color #1a73e8 para Personal' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('clics rapidos: PATCH en serie y un fallo antiguo no revierte el cambio posterior', async () => {
+    let n = 0;
+    routes['PATCH /api/calendars/a%40x'] = () => {
+      n++;
+      return n === 1
+        ? json({ error: { code: 'x', message: 'x' } }, 500)
+        : json({ ...CAL_A, color: '#188038' });
+    };
+    render(Ajustes);
+    const red = await screen.findByRole('button', { name: 'Color #d93025 para Personal' });
+    await fireEvent.click(red);
+    await fireEvent.click(screen.getByRole('button', { name: 'Color #188038 para Personal' }));
+    await waitFor(() => expect(calls('PATCH', '/api/calendars/a%40x')).toHaveLength(2));
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole('button', { name: 'Color #188038 para Personal' })
+          .getAttribute('aria-pressed'),
+      ).toBe('true'),
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('sin calendarios al abrir: importa automaticamente una vez', async () => {
+    routes['GET /api/calendars'] = () => json({ calendars: [] });
+    routes['POST /api/calendars/refresh'] = () => json({ calendars: [CAL_B] });
+    render(Ajustes);
+    expect(await screen.findByText('Compartido')).toBeTruthy();
+    expect(calls('POST', '/api/calendars/refresh')).toHaveLength(1);
+  });
+
+  it('vuelta correcta de Google: importa aunque ya hubiera calendarios', async () => {
+    window.location.hash = '#/ajustes?google=ok';
+    routes['POST /api/calendars/refresh'] = () => json({ calendars: [CAL_A, CAL_B] });
+    render(Ajustes);
+    expect(await screen.findByText('Compartido')).toBeTruthy();
+    expect(calls('POST', '/api/calendars/refresh')).toHaveLength(1);
+    expect(calls('GET', '/api/calendars')).toHaveLength(0);
+  });
+
+  it('boton "Actualizar desde Google" llama a refresh y muestra el resultado', async () => {
+    render(Ajustes);
+    await screen.findByText('Personal');
+    routes['POST /api/calendars/refresh'] = () => json({ calendars: [CAL_A, CAL_B] });
+    await fireEvent.click(screen.getByRole('button', { name: 'Actualizar desde Google' }));
+    expect(await screen.findByText('Compartido')).toBeTruthy();
+    expect(screen.getByText('Calendarios actualizados desde Google.')).toBeTruthy();
+  });
+
+  it('refresh con google_not_connected: aviso de error', async () => {
+    render(Ajustes);
+    await screen.findByText('Personal');
+    routes['POST /api/calendars/refresh'] = () =>
+      json({ error: { code: 'google_not_connected', message: 'x' } }, 409);
+    await fireEvent.click(screen.getByRole('button', { name: 'Actualizar desde Google' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Google no está conectado/);
+  });
+
+  it('Google desconectado: aviso y sin peticiones de calendarios', async () => {
+    routes['GET /api/google/status'] = () => json(disconnected());
+    render(Ajustes);
+    expect(await screen.findByText(/Conecta Google para ver y configurar/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Actualizar desde Google' })).toBeNull();
+    expect(calls('GET', '/api/calendars')).toHaveLength(0);
   });
 });

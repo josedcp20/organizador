@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { GoogleStatus } from '@organizador/shared';
+  import { CALENDAR_PALETTE, isHexColor } from '@organizador/shared';
+  import type { CalendarInfo, GoogleStatus } from '@organizador/shared';
   import { session, meInfo } from '../lib/auth';
-  import { logout } from '../lib/api';
+  import { ApiError, logout } from '../lib/api';
+  import { fetchCalendars, patchCalendar, refreshCalendars } from '../lib/calendars';
   import {
     apiErrorMessage,
     connectErrorMessage,
@@ -22,12 +24,101 @@
   let statusError = $state('');
   /** Resultado de la vuelta de Google o de una accion (connect/disconnect). */
   let notice = $state<{ kind: 'ok' | 'error'; text: string } | null>(null);
+  /** Vuelta correcta de Google: se reimportan los calendarios aunque ya hubiera. */
+  let importAfterConnect = false;
+
+  // --- Calendarios ---
+  let calendars = $state<CalendarInfo[]>([]);
+  let calLoading = $state(false);
+  let calLoaded = $state(false);
+  let calError = $state('');
+  let calRefreshing = $state(false);
+  let calNotice = $state('');
+
+  function calendarsErrorMessage(e: unknown): string {
+    if (e instanceof ApiError && e.code === 'google_not_connected') {
+      return 'Google no está conectado. Vuelve a conectar para importar los calendarios.';
+    }
+    if (e instanceof ApiError && e.code === 'google_unavailable') {
+      return 'Google no responde ahora mismo. Inténtalo de nuevo en unos minutos.';
+    }
+    return apiErrorMessage(e);
+  }
+
+  /** Carga la lista; si esta vacia (o se fuerza) importa desde Google una sola vez. */
+  async function loadCalendars(forceImport = false) {
+    calLoading = true;
+    calError = '';
+    try {
+      let list = forceImport ? null : (await fetchCalendars()).calendars;
+      if (list === null || list.length === 0) list = (await refreshCalendars()).calendars;
+      calendars = list;
+    } catch (e) {
+      calError = calendarsErrorMessage(e);
+    } finally {
+      calLoading = false;
+      calLoaded = true;
+    }
+  }
+
+  async function refreshFromGoogle() {
+    calRefreshing = true;
+    calNotice = '';
+    calError = '';
+    try {
+      calendars = (await refreshCalendars()).calendars;
+      calNotice = 'Calendarios actualizados desde Google.';
+    } catch (e) {
+      calError = calendarsErrorMessage(e);
+    } finally {
+      calRefreshing = false;
+    }
+  }
+
+  // Por calendario: cola de PATCH (se envian en orden), contador de version y ultimo estado
+  // confirmado por el servidor, para que clics rapidos no produzcan rollbacks erroneos.
+  const patchQueue: Record<string, Promise<void> | undefined> = {};
+  const patchVersion: Record<string, number | undefined> = {};
+  const confirmed: Record<string, { color: string; visible: boolean } | undefined> = {};
+
+  /** Guarda en el Worker; actualiza al instante y revierte (al ultimo estado confirmado) si falla. */
+  function saveCalendar(cal: CalendarInfo, patch: { color?: string; visible?: boolean }) {
+    if (patch.color !== undefined && !isHexColor(patch.color)) return;
+    const id = cal.id;
+    confirmed[id] ??= { color: cal.color, visible: cal.visible };
+    const version = (patchVersion[id] ?? 0) + 1;
+    patchVersion[id] = version;
+    calNotice = '';
+    calError = '';
+    const apply = (c: { color?: string; visible?: boolean }) => {
+      calendars = calendars.map((x) => (x.id === id ? { ...x, ...c } : x));
+    };
+    apply(patch);
+    const run = async () => {
+      const latest = () => patchVersion[id] === version;
+      try {
+        const saved = await patchCalendar(id, patch);
+        confirmed[id] = { color: saved.color, visible: saved.visible };
+        // Si hay un cambio mas reciente en cola, su estado optimista prevalece.
+        if (latest()) calendars = calendars.map((x) => (x.id === saved.id ? saved : x));
+      } catch (e) {
+        if (!latest()) return; // el cambio posterior decide el estado final
+        apply(confirmed[id]!);
+        calError = `No se pudo guardar el cambio en "${cal.name}". ${calendarsErrorMessage(e)}`;
+      }
+    };
+    patchQueue[id] = (patchQueue[id] ?? Promise.resolve()).then(run);
+  }
+
+  const roleLabel = (c: CalendarInfo) =>
+    c.writable ? '' : c.accessRole === 'freeBusyReader' ? 'solo ocupado/libre' : 'solo lectura';
 
   async function loadStatus(): Promise<boolean> {
     loading = true;
     statusError = '';
     try {
       google = await fetchGoogleStatus();
+      if (google.connected && !calLoaded && !calLoading) void loadCalendars(importAfterConnect);
       return true;
     } catch (e) {
       statusError = `No se pudo obtener el estado de Google. ${apiErrorMessage(e)}`;
@@ -75,6 +166,7 @@
     const result = takeGoogleResult();
     if (result) {
       if (result.ok) {
+        importAfterConnect = true;
         // `?google=ok` lo puede forjar cualquiera: solo se afirma el exito si el servidor lo confirma.
         void loadStatus().then((loaded) => {
           notice =
@@ -151,6 +243,87 @@
       {/if}
     {/if}
   </section>
+
+  {#if google?.connected}
+    <section class="calendars" aria-labelledby="cal-title" aria-busy={calLoading || calRefreshing}>
+      <h2 id="cal-title">Calendarios</h2>
+      <p class="muted hint">
+        Los eventos se sincronizan en ambos sentidos con Google; los colores y la visibilidad se
+        quedan solo en la app.
+      </p>
+      <button
+        type="button"
+        class="primary"
+        disabled={calRefreshing || calLoading}
+        onclick={refreshFromGoogle}
+      >
+        {calRefreshing ? 'Actualizando...' : 'Actualizar desde Google'}
+      </button>
+      {#if calNotice}
+        <p class="notice ok" role="status">{calNotice}</p>
+      {/if}
+      {#if calError}
+        <p class="notice error" role="alert">{calError}</p>
+      {/if}
+      {#if calLoading && calendars.length === 0}
+        <p role="status">Cargando calendarios...</p>
+      {:else if calLoaded && calendars.length === 0 && !calError}
+        <p class="muted">No hay calendarios.</p>
+      {/if}
+      {#if calendars.length > 0}
+        <ul class="cal-list" aria-label="Lista de calendarios">
+          {#each calendars as cal (cal.id)}
+            <li class="cal">
+              <div class="cal-head">
+                <span class="dot" style:background-color={cal.color} aria-hidden="true"></span>
+                <span class="cal-name">{cal.name}</span>
+                {#if roleLabel(cal)}
+                  <span class="badge">{roleLabel(cal)}</span>
+                {/if}
+                <label class="switch">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={cal.visible}
+                    aria-label={`Mostrar ${cal.name}`}
+                    onchange={(e) => saveCalendar(cal, { visible: e.currentTarget.checked })}
+                  />
+                  <span class="muted">{cal.visible ? 'Visible' : 'Oculto'}</span>
+                </label>
+              </div>
+              <div class="swatches" role="group" aria-label={`Color de ${cal.name}`}>
+                {#each CALENDAR_PALETTE as color (color)}
+                  <button
+                    type="button"
+                    class="swatch"
+                    class:selected={cal.color.toLowerCase() === color}
+                    style:background-color={color}
+                    aria-label={`Color ${color} para ${cal.name}`}
+                    aria-pressed={cal.color.toLowerCase() === color}
+                    onclick={() => saveCalendar(cal, { color })}
+                  ></button>
+                {/each}
+                <label class="custom">
+                  <span class="muted">Personalizado</span>
+                  <input
+                    type="color"
+                    value={cal.color}
+                    aria-label={`Color personalizado para ${cal.name}`}
+                    onchange={(e) => saveCalendar(cal, { color: e.currentTarget.value })}
+                  />
+                </label>
+              </div>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+  {:else if google && !google.connected && google.configured}
+    <section class="calendars" aria-labelledby="cal-title">
+      <h2 id="cal-title">Calendarios</h2>
+      <p class="muted">Conecta Google para ver y configurar tus calendarios.</p>
+    </section>
+  {/if}
 
   <ul>
     <li>Notificaciones push</li>
@@ -236,6 +409,93 @@
 
   button.secondary {
     background-color: #b3261e;
+  }
+
+  .calendars {
+    padding: 0.75rem 0;
+    border-top: 1px solid #eee;
+  }
+
+  ul.cal-list li.cal {
+    padding: 0.75rem 0;
+  }
+
+  .cal-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .cal-name {
+    font-weight: 600;
+    flex: 1 1 8rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .dot {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 3px;
+    flex: none;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: #eee;
+    color: #444;
+  }
+
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 44px;
+  }
+
+  .switch input {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .swatches {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+  }
+
+  button.swatch {
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    border: 2px solid transparent;
+  }
+
+  button.swatch.selected {
+    border-color: #111;
+    outline: 2px solid #fff;
+    outline-offset: -4px;
+  }
+
+  .custom {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-left: 0.5rem;
+  }
+
+  .custom input {
+    width: 44px;
+    height: 32px;
+    padding: 0;
   }
 
   button:disabled {

@@ -95,3 +95,53 @@ export interface TodayPayload {
   events: Event[];
   notes: Note[];
 }
+
+/**
+ * Paleta fija de la app para calendarios (colores PROPIOS, distintos de los de Google).
+ * Los calendarios nuevos reciben el siguiente libre; el usuario puede elegir otro o uno personalizado.
+ */
+export const CALENDAR_PALETTE = [
+  '#1a73e8', // azul
+  '#d93025', // rojo
+  '#188038', // verde
+  '#f9ab00', // ambar
+  '#8e24aa', // violeta
+  '#00897b', // turquesa
+  '#e8710a', // naranja
+  '#c2185b', // rosa
+  '#5d4037', // marron
+  '#546e7a', // gris azulado
+] as const;
+
+/** `#rrggbb` estricto (6 digitos hex, con almohadilla). */
+export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+export function isHexColor(value: unknown): value is string {
+  return typeof value === 'string' && HEX_COLOR_RE.test(value);
+}
+
+/** Calendario tal y como lo ve la app (`GET /api/calendars`). */
+export interface CalendarInfo {
+  /** calendarId de Google. */
+  id: string;
+  name: string;
+  /** Color propio de la app (#rrggbb). Nunca se envia a Google. */
+  color: string;
+  /** Interruptor "visible/sincronizar" (solo en la app). */
+  visible: boolean;
+  /** owner | writer | reader | freeBusyReader (null si Google no lo informo). */
+  accessRole: string | null;
+  /** true solo para owner/writer. */
+  writable: boolean;
+}
+
+/** `GET /api/calendars` y `POST /api/calendars/refresh` */
+export interface CalendarsResponse {
+  calendars: CalendarInfo[];
+}
+
+/** Body de `PATCH /api/calendars/:id` (solo estos campos; cualquier otro se rechaza). */
+export interface CalendarPatch {
+  color?: string;
+  visible?: boolean;
+}

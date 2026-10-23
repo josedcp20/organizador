@@ -154,7 +154,7 @@ oauth.get('/oauth/google/callback', async (c) => {
       check.scopes,
       t,
     );
-    // TODO(T2.3): importar calendarList tras conectar.
+    // La importacion de calendarList tras conectar la dispara la UI via /api/calendars/refresh.
     return backToApp(c);
   } catch (err) {
     console.error('oauth_callback_error', err instanceof Error ? err.name : 'unknown');

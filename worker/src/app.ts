@@ -4,6 +4,7 @@ import type { Env } from './env';
 import { errorBody } from './errors';
 import { auth } from './middleware/auth';
 import { cors } from './middleware/cors';
+import { calendars } from './routes/calendars';
 import { me } from './routes/me';
 import { oauth } from './routes/oauth';
 import { getVersion } from './version';
@@ -17,6 +18,7 @@ app.use('/api/*', auth);
 app.get('/api/health', (c) => c.json({ ok: true, version: getVersion(c.env) }));
 app.route('/', me);
 app.route('/', oauth);
+app.route('/', calendars);
 
 app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 
