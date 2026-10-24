@@ -162,7 +162,14 @@ export async function googleRequest(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       redirect: 'error',
     });
-  } catch {
+  } catch (e) {
+    // Solo nombre y mensaje del error de red (nunca la URL ni cabeceras con el token).
+    console.warn(
+      'google_calendar_api',
+      'fetch_failed',
+      method,
+      e instanceof Error ? `${e.name}: ${e.message}` : 'unknown',
+    );
     throw new GoogleApiError(0);
   }
   if (!res.ok) {
