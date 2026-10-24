@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import ExpiryPicker from '../components/ExpiryPicker.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
   import Banner from '../components/Banner.svelte';
   import { navigateTo } from '../router';
   import {
@@ -13,7 +14,6 @@
     type ExpiryMode,
   } from '../lib/notes';
 
-  let title = 'Nota Rápida';
   let noteText = $state(quickDraft.text);
   let mode = $state<ExpiryMode>('today');
   let days = $state(7);
@@ -73,7 +73,7 @@
 </script>
 
 <div class="quick">
-  <h1>{title}</h1>
+  <PageHeader title="Nota Rápida" />
   {#if saved}<Banner kind="info">Nota guardada</Banner>{/if}
   {#if error}<Banner kind="error">{error}</Banner>{/if}
   <textarea
@@ -99,12 +99,6 @@
     flex-direction: column;
     gap: var(--sp-4);
     max-width: 40rem;
-  }
-
-  h1 {
-    font-size: var(--fs-xl);
-    font-weight: 600;
-    color: var(--ink-2);
   }
 
   textarea {

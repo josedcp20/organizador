@@ -23,6 +23,7 @@
     visibleRange,
     type CalView,
   } from '../lib/events';
+  import Banner from '../components/Banner.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import CalendarFilter from '../components/CalendarFilter.svelte';
   import DayList from '../components/DayList.svelte';
@@ -142,10 +143,8 @@
 <CalendarFilter />
 
 {#if error}
-  <div class="msg err" role="alert">
-    <p>{error}</p>
-    <button type="button" class="btn" onclick={() => load(view, anchor)}>Reintentar</button>
-  </div>
+  <Banner kind="error">{error}</Banner>
+  <button type="button" class="btn" onclick={() => load(view, anchor)}>Reintentar</button>
 {/if}
 
 {#if loading}
@@ -214,12 +213,6 @@
   .msg {
     margin: var(--sp-3) 0;
     color: var(--ink-2);
-  }
-  .msg.err {
-    color: var(--danger);
-  }
-  .msg.err .btn {
-    margin-top: var(--sp-2);
   }
   .content.stale {
     opacity: 0.55;

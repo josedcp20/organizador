@@ -200,8 +200,8 @@ label {
 .list > li + li {
   border-top: 1px solid var(--line);
 }
-.list > li > a,
-.list > li > button,
+.list > li > a:where(:not(.btn)),
+.list > li > button:where(:not(.btn)),
 .list-row {
   display: flex;
   align-items: center;
@@ -216,12 +216,12 @@ label {
   text-align: left;
   text-decoration: none;
 }
-.list > li > a:hover,
-.list > li > button:hover {
+.list > li > a:where(:not(.btn)):hover,
+.list > li > button:where(:not(.btn)):hover {
   background: var(--surface-2);
 }
-.list > li > a:focus-visible,
-.list > li > button:focus-visible {
+.list > li > a:where(:not(.btn)):focus-visible,
+.list > li > button:where(:not(.btn)):focus-visible {
   outline-offset: -2px;
 }
 

@@ -122,7 +122,7 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
   }
-  .num {
+  .pick .num {
     display: inline-block;
     min-width: 1.6rem;
     text-align: center;

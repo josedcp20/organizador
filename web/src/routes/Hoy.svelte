@@ -119,24 +119,18 @@
                   {#if row.fromApp}<span class="badge">App</span>{/if}
                   {#if row.tentative}<span class="badge">Provisional</span>{/if}
                   {#if row.pending}
-                    <span
-                      class="icon"
-                      role="img"
-                      aria-label="Pendiente de sincronizar"
-                      title="Pendiente de sincronizar">&#9201;</span
+                    <span class="icon" role="img" aria-label="Pendiente de sincronizar" title="Pendiente de sincronizar"
+                      ><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2" /></svg></span
                     >
                   {/if}
                   {#if row.remind}
                     <span class="icon" role="img" aria-label="Con aviso" title="Con aviso"
-                      >&#128276;</span
+                      ><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4" /></svg></span
                     >
                   {/if}
                   {#if row.hasNotes}
-                    <span
-                      class="icon"
-                      role="img"
-                      aria-label="Con notas privadas"
-                      title="Con notas privadas">&#128221;</span
+                    <span class="icon" role="img" aria-label="Con notas privadas" title="Con notas privadas"
+                      ><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 3h9l4 4v14H6zM9 12h7M9 16h5" /></svg></span
                     >
                   {/if}
                   {#if row.location}<span class="loc muted">{row.location}</span>{/if}
@@ -194,6 +188,7 @@
   }
 
   .empty {
+    max-width: none;
     padding: var(--sp-4);
     border-radius: var(--r-m);
     background: var(--surface);

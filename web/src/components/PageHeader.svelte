@@ -23,6 +23,8 @@
   }
 
   h1 {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-size: var(--fs-2xl);
     font-weight: 800;
     letter-spacing: -0.02em;

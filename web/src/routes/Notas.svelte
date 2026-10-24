@@ -288,6 +288,7 @@
   }
 
   .empty {
+    max-width: none;
     padding: var(--sp-4);
     border-radius: var(--r-m);
     background: var(--surface);
@@ -295,6 +296,10 @@
 
   .editing {
     padding: var(--sp-3);
+  }
+  .editing > :global(.note-form) {
+    margin: 0;
+    padding: 0;
   }
 
   /* Escritorio: rejilla de notas en vez de una columna estirada */

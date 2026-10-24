@@ -461,6 +461,7 @@
   }
   .row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-3);
     min-height: var(--tap);
@@ -468,11 +469,12 @@
   }
   .row.col {
     flex-direction: column;
+    flex-wrap: nowrap;
     align-items: flex-start;
     gap: var(--sp-1);
   }
   .grow {
-    flex: 1;
+    flex: 1 1 12rem;
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -520,6 +522,7 @@
   }
   .cal-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--sp-3);
   }
@@ -531,7 +534,7 @@
     box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
   }
   .cal-name {
-    flex: 1;
+    flex: 1 1 10rem;
     min-width: 0;
     font-weight: 600;
     overflow-wrap: anywhere;
@@ -547,6 +550,7 @@
   }
   .switch {
     flex: none;
+    margin-left: auto;
     display: inline-flex;
     align-items: center;
     gap: var(--sp-2);
