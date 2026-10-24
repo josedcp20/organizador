@@ -314,7 +314,7 @@ describe('googleRequest: escrituras', () => {
     google.queue.push(json({ id: 'e1' }));
     await patchEventRequest('t', 'a@x', 'e1', '"1"', payload());
     const init = vi.mocked(fetch).mock.calls.at(-1)?.[1];
-    expect(init?.redirect).toBe('error');
+    expect(init?.redirect).toBe('manual');
   });
 
   it('POST/PATCH rechazan cuerpos que no salen de toGooglePayload, sin red', async () => {

@@ -160,7 +160,7 @@ export async function googleRequest(
       headers,
       body: needsBody ? JSON.stringify(opts.body) : undefined,
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      redirect: 'error',
+      redirect: 'manual', // Workers no admite 'error'; un 3xx cae en !res.ok y falla
     });
   } catch (e) {
     // Solo nombre y mensaje del error de red (nunca la URL ni cabeceras con el token).
