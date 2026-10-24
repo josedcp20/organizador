@@ -77,8 +77,8 @@
     <p class="err" role="alert">{localError || error}</p>
   {/if}
   <div class="actions">
-    <button type="submit" disabled={busy}>{busy ? 'Guardando...' : 'Guardar'}</button>
-    <button type="button" class="secondary" disabled={busy} onclick={oncancel}>Cancelar</button>
+    <button type="submit" class="btn btn-primary" disabled={busy}>{busy ? 'Guardando...' : 'Guardar'}</button>
+    <button type="button" class="btn" disabled={busy} onclick={oncancel}>Cancelar</button>
   </div>
 </form>
 
@@ -86,60 +86,34 @@
   .note-form {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.75rem;
-    margin-bottom: 1rem;
-    background: #f7f7f7;
-    border-radius: 6px;
+    gap: var(--sp-3);
+    padding: var(--sp-4);
+    margin-bottom: var(--sp-4);
+    border-radius: var(--r-m);
+    background: var(--surface);
   }
 
   label {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    font-size: 0.9rem;
+    gap: var(--sp-1);
+    font-size: var(--fs-s);
   }
 
   label.check {
     flex-direction: row;
     align-items: center;
-    gap: 0.5rem;
-  }
-
-  input[type='text'],
-  textarea {
-    padding: 0.5rem;
-    font-size: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-family: inherit;
+    gap: var(--sp-2);
+    min-height: var(--tap);
+    font-size: var(--fs-m);
   }
 
   .actions {
     display: flex;
-    gap: 0.5rem;
-  }
-
-  button {
-    padding: 0.5rem 1rem;
-    min-height: 44px;
-    background: #1a73e8;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-  }
-
-  button.secondary {
-    background: #777;
-  }
-
-  button:disabled {
-    opacity: 0.6;
+    gap: var(--sp-2);
   }
 
   .err {
-    margin: 0;
-    color: #8a1c13;
+    color: var(--danger);
   }
 </style>

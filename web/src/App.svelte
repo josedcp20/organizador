@@ -3,6 +3,7 @@
   import Evento from './routes/Evento.svelte';
   import { session, setReturnTo, takeReturnTo } from './lib/auth';
   import Layout from './components/Layout.svelte';
+  import CalendarFilter from './components/CalendarFilter.svelte';
   import Login from './routes/Login.svelte';
   import Hoy from './routes/Hoy.svelte';
   import Calendario from './routes/Calendario.svelte';
@@ -30,6 +31,9 @@
   <Login />
 {:else}
   <Layout>
+    {#snippet sidebar()}
+      {#if $currentRoute === 'calendario'}<CalendarFilter variant="list" />{/if}
+    {/snippet}
     {#if $currentRoute === 'calendario'}
       <Calendario />
     {:else if $currentRoute === 'notas'}
@@ -47,31 +51,3 @@
     {/if}
   </Layout>
 {/if}
-
-<style>
-  :global(*) {
-    box-sizing: border-box;
-  }
-
-  :global(body) {
-    margin: 0;
-    padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
-      'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    background-color: #fff;
-    color: #333;
-    height: 100%;
-  }
-
-  :global(html),
-  :global(#app) {
-    height: 100%;
-  }
-
-  :global(button) {
-    cursor: pointer;
-    font-family: inherit;
-  }
-</style>

@@ -10,7 +10,47 @@
   }: { event: CalEvent; day?: string; compact?: boolean } = $props();
 
   const time = $derived(eventTimeLabel(event, day, compact));
+
+  // Los colores de calendario son arbitrarios: tinta clara u oscura segun la que mas contraste da.
+  const LIGHT = '#ffffff';
+  const DARK = '#17202b';
+  function inkOn(hex: string): string {
+    const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return DARK;
+    const [r, g, b] = [0, 2, 4].map((i) => {
+      const c = parseInt(m[1].slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return 1.05 / (l + 0.05) >= (l + 0.05) / 0.0635 ? LIGHT : DARK;
+  }
+  const on = $derived(inkOn(event.color));
+
+  const ICONS = {
+    bell: 'M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4',
+    note: 'M6 3h9l4 4v14H6zM9 12h7M9 16h5',
+    app: 'M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 17l-5.2 2.7 1-5.9L3.5 9.7l5.9-.8z',
+    clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
+    warn: 'M12 3 2.5 20h19zM12 10v4.5M12 17.5h.01',
+  } as const;
 </script>
+
+{#snippet mark(d: string, label: string, warn = false)}
+  <span class="mk" class:warn title={label} role="img" aria-label={label}>
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"><path {d} /></svg
+    >
+  </span>
+{/snippet}
 
 <a
   class="chip"
@@ -19,39 +59,27 @@
   class:tentative={event.tentative}
   class:allday={event.allDay || event.multiDay}
   style:--c={event.color}
+  style:--on={on}
   data-testid="event-chip"
 >
+  {#if !compact}<span class="bar" aria-hidden="true"></span>{/if}
   <span class="body">
-    {#if time}<span class="time">{time}</span>{/if}
+    {#if time}<span class="time num">{time}</span>{/if}
     <span class="title">{event.title}</span>
     {#if !compact && event.location}<span class="loc">{event.location}</span>{/if}
   </span>
   <span class="marks">
-    {#if event.remind}
-      <span class="mark" title="Con aviso" role="img" aria-label="Con aviso">🔔</span>
-    {/if}
-    {#if event.hasNotes}
-      <span class="mark" title="Con notas privadas" role="img" aria-label="Con notas privadas"
-        >📝</span
-      >
-    {/if}
-    {#if event.fromApp}
-      <span class="mark" title="Creado en la app" role="img" aria-label="Creado en la app">★</span>
-    {/if}
+    {#if event.remind}{@render mark(ICONS.bell, 'Con aviso')}{/if}
+    {#if event.hasNotes}{@render mark(ICONS.note, 'Con notas privadas')}{/if}
+    {#if event.fromApp}{@render mark(ICONS.app, 'Creado en la app')}{/if}
     {#if event.pending && event.pendingError}
-      <span
-        class="mark warn"
-        title={`No se pudo guardar en Google: ${event.pendingError}`}
-        role="img"
-        aria-label={`Aviso: no se pudo guardar en Google (${event.pendingError})`}>⚠</span
-      >
+      {@render mark(
+        ICONS.warn,
+        `Aviso: no se pudo guardar en Google (${event.pendingError})`,
+        true,
+      )}
     {:else if event.pending}
-      <span
-        class="mark"
-        title="Pendiente de enviar a Google"
-        role="img"
-        aria-label="Pendiente de enviar a Google">🕒</span
-      >
+      {@render mark(ICONS.clock, 'Pendiente de enviar a Google')}
     {/if}
   </span>
 </a>
@@ -64,100 +92,132 @@
 <style>
   .chip {
     display: flex;
-    box-sizing: border-box;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding: 0.5rem 0.6rem;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--c) 14%, #fff);
-    border-left: 4px solid var(--c);
-    font-size: 1rem;
-    line-height: 1.3;
+    align-items: center;
+    gap: var(--sp-3);
     min-width: 0;
-    min-height: 44px;
-    color: inherit;
+    color: var(--ink);
     text-decoration: none;
-  }
-  .chip.allday {
-    background: var(--c);
-    color: #fff;
-  }
-  .chip.tentative {
-    border-left-style: dashed;
-    opacity: 0.8;
   }
   .body {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.1rem 0.5rem;
+    flex-direction: column;
     flex: 1;
     min-width: 0;
   }
   .time {
-    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    font-size: var(--fs-s);
     font-weight: 600;
   }
   .title {
+    font-weight: 600;
     overflow-wrap: anywhere;
   }
   .loc {
-    flex-basis: 100%;
-    font-size: 0.85rem;
-    opacity: 0.75;
+    color: var(--ink-2);
+    font-size: var(--fs-s);
+    overflow-wrap: anywhere;
   }
   .marks {
     display: flex;
-    gap: 0.25rem;
-    flex-shrink: 0;
+    gap: var(--sp-2);
+    flex: none;
+    color: var(--ink-2);
   }
-  .mark {
-    font-size: 0.9rem;
+  .mk {
+    display: inline-flex;
   }
-  .mark.warn {
-    color: #b3261e;
-  }
-  .allday .mark.warn {
-    color: #ffd8d4;
-  }
-  .err {
-    margin: 0.2rem 0 0;
-    font-size: 0.85rem;
-    color: #b3261e;
+  .mk.warn {
+    color: var(--danger);
   }
 
+  /* Dia completo / multi-dia: bloque solido con el color del calendario */
+  .chip.allday {
+    background: var(--c);
+    color: var(--on);
+  }
+  .allday .time,
+  .allday .loc,
+  .allday .marks,
+  .allday .mk.warn {
+    color: inherit;
+  }
+  .allday .bar {
+    display: none;
+  }
+
+  /* Tentativo: discontinuo */
+  .tentative .bar {
+    background: repeating-linear-gradient(to bottom, var(--c) 0 5px, transparent 5px 8px);
+  }
+  .chip.allday.tentative {
+    outline: 2px dashed var(--on);
+    outline-offset: -5px;
+  }
+  .chip.allday.tentative:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .err {
+    padding: 0 var(--sp-4) var(--sp-3);
+    color: var(--danger);
+    font-size: var(--fs-s);
+  }
+
+  /* Compacto: celda del mes en escritorio */
   .chip.compact {
-    min-height: 0;
     position: relative;
     z-index: 1;
-    padding: 0.05rem 0.3rem;
-    font-size: 0.75rem;
-    border-radius: 4px;
-    border-left-width: 3px;
-    gap: 0.25rem;
+    gap: var(--sp-1);
+    padding: 2px var(--sp-1) 2px 5px;
+    border-left: 3px solid var(--c);
+    border-radius: var(--r-s);
+    background: color-mix(in srgb, var(--c) 16%, var(--surface));
+    font-size: var(--fs-xs);
+    line-height: 1.3;
+  }
+  .chip.compact.allday {
+    background: var(--c);
+  }
+  .chip.compact.tentative {
+    border-left-style: dashed;
   }
   .compact .body {
-    flex-wrap: nowrap;
+    flex-direction: row;
+    gap: var(--sp-1);
     overflow: hidden;
+  }
+  .compact .time {
+    flex: none;
+    color: inherit;
+    font-size: inherit;
   }
   .compact .title {
     overflow: hidden;
+    font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .compact .mark {
-    font-size: 0.65rem;
+  .compact .mk :global(svg) {
+    width: 12px;
+    height: 12px;
+  }
+  .compact .marks {
+    gap: 2px;
+    color: inherit;
   }
 
-  /* En movil la celda del mes solo muestra puntos de color */
+  /* Movil: la celda del mes solo muestra puntos de color */
   @media (max-width: 699px) {
     .chip.compact {
-      width: 0.7rem;
-      height: 0.7rem;
+      width: 8px;
+      height: 8px;
       padding: 0;
       border: none;
       border-radius: 50%;
       background: var(--c);
-      /* En movil el punto no es objetivo tactil: el toque va a la celda (elige el dia) */
+      /* El punto no es objetivo tactil: el toque va a la celda (elige el dia) */
       pointer-events: none;
     }
     .compact .body,

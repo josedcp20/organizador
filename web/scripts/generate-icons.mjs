@@ -17,7 +17,7 @@ const targets = [
 for (const [name, size] of targets) {
   await sharp(svg, { density: 384 })
     .resize(size, size)
-    .flatten({ background: '#2563eb' })
+    .flatten({ background: '#2F5BEA' })
     .png()
     .toFile(fileURLToPath(new URL(name, dir)));
   console.log('generado', name);

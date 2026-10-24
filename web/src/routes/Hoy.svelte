@@ -2,12 +2,11 @@
   import { onMount } from 'svelte';
   import type { TodayResponse } from '@organizador/shared';
   import Banner from '../components/Banner.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
   import { apiErrorMessage, fetchGoogleStatus } from '../lib/google';
   import { calendarsWithSyncError, fetchCalendars } from '../lib/calendars';
   import { fetchToday, toRows } from '../lib/today';
   import { eventHref } from '../router';
-
-  let title = 'Hoy';
 
   let data = $state<TodayResponse | null>(null);
   let loading = $state(true);
@@ -52,6 +51,14 @@
       : [],
   );
 
+  function dayParts(date: string) {
+    const d = new Date(`${date}T12:00:00`);
+    return {
+      num: String(Number(date.slice(8, 10))),
+      text: d.toLocaleDateString('es-ES', { weekday: 'long', month: 'long' }),
+    };
+  }
+
   onMount(() => {
     void load();
     const onVisible = () => {
@@ -62,77 +69,81 @@
   });
 </script>
 
-<div class="container">
-  <div class="head">
-    <h1>{title}</h1>
-    <div class="head-actions">
-      <a class="quick" href="#/nota-rapida">Nota rápida</a>
-      <button type="button" disabled={loading} onclick={() => load()}>
-        {loading ? 'Actualizando...' : 'Actualizar'}
-      </button>
-    </div>
-  </div>
+<PageHeader title="Hoy">
+  {#snippet actions()}
+    <button type="button" class="btn btn-quiet" disabled={loading} onclick={() => load()}>
+      {loading ? 'Actualizando...' : 'Actualizar'}
+    </button>
+  {/snippet}
+</PageHeader>
 
-  {#if googleDown}
-    <Banner kind="warning">
-      Google no está conectado, así que los eventos pueden estar desactualizados.
-      <a href="#/ajustes">Ir a Ajustes</a>
-    </Banner>
-  {/if}
-  {#if syncErrors.length > 0}
-    <Banner kind="error">
-      Error de sincronización en: {syncErrors.join(', ')}. <a href="#/ajustes">Ver Ajustes</a>
-    </Banner>
-  {/if}
+{#if googleDown}
+  <Banner kind="warning">
+    Google no está conectado, así que los eventos pueden estar desactualizados.
+    <a href="#/ajustes">Ir a Ajustes</a>
+  </Banner>
+{/if}
+{#if syncErrors.length > 0}
+  <Banner kind="error">
+    Error de sincronización en: {syncErrors.join(', ')}. <a href="#/ajustes">Ver Ajustes</a>
+  </Banner>
+{/if}
 
-  {#if error}
-    <Banner kind="error">{error}</Banner>
-  {/if}
+{#if error}
+  <Banner kind="error">{error}</Banner>
+{/if}
 
-  {#if loading && !data}
-    <p role="status">Cargando...</p>
-  {/if}
+{#if loading && !data}
+  <p role="status" class="muted">Cargando...</p>
+{/if}
 
-  {#each days as day (day.date)}
+<div class="days">
+  {#each days as day, i (day.date)}
+    {@const parts = dayParts(day.date)}
     <section aria-labelledby={`day-${day.date}`}>
-      <h2 id={`day-${day.date}`}>{day.label} <small>{day.date}</small></h2>
+      <h2 id={`day-${day.date}`} class="day-head" class:soft={i > 0}>
+        <span class="num day-num"><span class:mark={i === 0}>{parts.num}</span></span>
+        <span class="day-name"><strong>{day.label}</strong> <span class="muted">{parts.text}</span></span>
+      </h2>
       {#if day.rows.length === 0}
-        <p class="muted">{day.empty}</p>
+        <p class="muted empty">{day.empty}</p>
       {:else}
-        <ul class="events">
+        <ul class="list">
           {#each day.rows as row (row.id)}
-            <li class="event-item">
-              <a
-                class="event"
-                style:border-left-color={row.color}
-                href={eventHref(row.calendarId, row.eventId)}
-              >
-              <span class="time">{row.time}</span>
-              <span class="body">
-                <span class="title">{row.title}</span>
-                {#if row.fromApp}<span class="badge">App</span>{/if}
-                {#if row.tentative}<span class="badge">Provisional</span>{/if}
-                {#if row.pending}
-                  <span
-                    class="pending"
-                    role="img"
-                    aria-label="Pendiente de sincronizar"
-                    title="Pendiente de sincronizar">&#9201;</span
-                  >
-                {/if}
-                {#if row.remind}
-                  <span role="img" aria-label="Con aviso" title="Con aviso">&#128276;</span>
-                {/if}
-                {#if row.hasNotes}
-                  <span role="img" aria-label="Con notas privadas" title="Con notas privadas"
-                    >&#128221;</span
-                  >
-                {/if}
-                {#if row.location}<span class="loc">{row.location}</span>{/if}
-                {#if row.pendingError}
-                  <span class="warn">No se pudo enviar a Google: {row.pendingError}</span>
-                {/if}
-              </span>
+            <li>
+              <a class="event" href={eventHref(row.calendarId, row.eventId)}>
+                <span class="bar" style="--c: {row.color}"></span>
+                <time class="time">{row.time}</time>
+                <span class="body">
+                  <span class="title">{row.title}</span>
+                  {#if row.fromApp}<span class="badge">App</span>{/if}
+                  {#if row.tentative}<span class="badge">Provisional</span>{/if}
+                  {#if row.pending}
+                    <span
+                      class="icon"
+                      role="img"
+                      aria-label="Pendiente de sincronizar"
+                      title="Pendiente de sincronizar">&#9201;</span
+                    >
+                  {/if}
+                  {#if row.remind}
+                    <span class="icon" role="img" aria-label="Con aviso" title="Con aviso"
+                      >&#128276;</span
+                    >
+                  {/if}
+                  {#if row.hasNotes}
+                    <span
+                      class="icon"
+                      role="img"
+                      aria-label="Con notas privadas"
+                      title="Con notas privadas">&#128221;</span
+                    >
+                  {/if}
+                  {#if row.location}<span class="loc muted">{row.location}</span>{/if}
+                  {#if row.pendingError}
+                    <span class="warn">No se pudo enviar a Google: {row.pendingError}</span>
+                  {/if}
+                </span>
               </a>
             </li>
           {/each}
@@ -143,95 +154,69 @@
 </div>
 
 <style>
-  .container {
-    padding: 1rem;
+  .days {
+    display: grid;
+    gap: var(--sp-6);
   }
 
-  .head {
+  @media (min-width: 1024px) {
+    .days {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+      gap: var(--sp-6) var(--sp-5);
+    }
+  }
+
+  .day-head {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
+    align-items: baseline;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
   }
 
-  .head-actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
+  .day-num {
+    font-family: var(--font-display);
+    font-size: var(--fs-display);
+    font-weight: 800;
+    line-height: 1;
   }
 
-  a.quick {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    padding: 0 1rem;
-    border-radius: 4px;
-    background: #188038;
-    color: #fff;
-    text-decoration: none;
+  .soft .day-num {
+    font-size: var(--fs-2xl);
+    font-weight: 600;
+    color: var(--ink-2);
   }
 
-  h1 {
-    margin: 0 0 1rem 0;
+  .day-name {
+    font-family: var(--font-body);
+    font-size: var(--fs-m);
+    font-weight: 400;
   }
 
-  h2 {
-    font-size: 1.15rem;
-    margin: 1rem 0 0.5rem;
-  }
-
-  small,
-  .muted {
-    color: #666;
-    font-weight: normal;
-  }
-
-  button {
-    padding: 0.5rem 1rem;
-    background-color: #1a73e8;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    min-height: 44px;
-  }
-
-  button:disabled {
-    opacity: 0.6;
-  }
-
-  ul.events {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-  }
-
-  .event-item {
-    margin-bottom: 0.4rem;
+  .empty {
+    padding: var(--sp-4);
+    border-radius: var(--r-m);
+    background: var(--surface);
   }
 
   .event {
-    min-height: 44px;
-    color: inherit;
-    text-decoration: none;
-    display: flex;
-    gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    border-left: 5px solid #1a73e8;
-    background: #f7f7f7;
-    border-radius: 4px;
+    gap: var(--sp-3);
+    align-items: stretch;
   }
 
   .time {
     flex: none;
     min-width: 5.5rem;
-    font-variant-numeric: tabular-nums;
-    color: #444;
+    color: var(--ink-2);
+    font-size: var(--fs-s);
+    padding-top: 2px;
   }
 
   .body {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem 0.5rem;
+    align-items: baseline;
+    gap: 0 var(--sp-2);
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -242,21 +227,25 @@
 
   .loc {
     flex-basis: 100%;
-    color: #666;
-    font-size: 0.9rem;
+    font-size: var(--fs-s);
+  }
+
+  .icon {
+    font-size: var(--fs-s);
+    opacity: 0.75;
   }
 
   .badge {
-    font-size: 0.7rem;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    background: #e0e0e0;
-    color: #333;
+    padding: 0 var(--sp-2);
+    border-radius: var(--r-s);
+    background: var(--surface-2);
+    color: var(--ink-2);
+    font-size: var(--fs-xs);
   }
 
   .warn {
     flex-basis: 100%;
-    color: #8a1c13;
-    font-size: 0.85rem;
+    color: var(--danger);
+    font-size: var(--fs-s);
   }
 </style>

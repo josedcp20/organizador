@@ -11,7 +11,7 @@ export default defineConfig({
       filename: 'sw.ts',
       injectRegister: 'auto',
       registerType: 'autoUpdate',
-      injectManifest: { globPatterns: ['**/*.{js,css,html,svg,png}'] },
+      injectManifest: { globPatterns: ['**/*.{js,css,html,svg,png,woff2}'] },
       manifestFilename: 'manifest.json',
       manifest: {
         name: 'Organizador personal',
@@ -21,8 +21,8 @@ export default defineConfig({
         scope: '/organizador/',
         lang: 'es',
         display: 'standalone',
-        theme_color: '#2563eb',
-        background_color: '#ffffff',
+        theme_color: '#EEF1F4', // --bg (claro); index.html da la variante oscura por media
+        background_color: '#EEF1F4',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

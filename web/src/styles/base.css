@@ -1,0 +1,324 @@
+/* Estilos globales y clases utilitarias. Guia: docs/diseno.md */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: var(--fs-m);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  line-height: var(--lh-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--fs-2xl);
+}
+h2 {
+  font-size: var(--fs-xl);
+}
+h3 {
+  font-size: var(--fs-l);
+}
+
+p,
+ul,
+ol {
+  margin: 0;
+}
+
+p,
+li {
+  max-width: var(--measure);
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+time,
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-s);
+}
+
+::selection {
+  background: var(--mark);
+  color: var(--mark-ink);
+}
+
+/* Botones */
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.btn:hover {
+  background: var(--surface-2);
+}
+.btn:active {
+  transform: scale(0.98);
+}
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+.btn-quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
+}
+.btn-quiet:hover {
+  background: var(--accent-soft);
+}
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--accent-ink);
+}
+.btn-danger:hover {
+  background: color-mix(in srgb, var(--danger) 88%, var(--ink));
+}
+
+/* Formularios */
+input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']),
+textarea,
+select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: max(16px, 1rem); /* evita el zoom automatico de iOS */
+}
+textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-2);
+}
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--accent);
+  width: 20px;
+  height: 20px;
+}
+label {
+  font-weight: 600;
+}
+
+/* Lista agrupada (estilo iOS): un contenedor, filas separadas por linea fina */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border-radius: var(--r-m);
+  overflow: hidden;
+}
+.list > li {
+  max-width: none;
+}
+.list > li + li {
+  border-top: 1px solid var(--line);
+}
+.list > li > a,
+.list > li > button,
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--sp-3) var(--sp-4);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+.list > li > a:hover,
+.list > li > button:hover {
+  background: var(--surface-2);
+}
+.list > li > a:focus-visible,
+.list > li > button:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Barra de color de evento: style="--c: <color del calendario>" */
+.bar {
+  flex: none;
+  align-self: stretch;
+  width: 4px;
+  min-height: 1.25em;
+  border-radius: 2px;
+  background: var(--c, var(--ink-2));
+}
+
+/* Trazo de rotulador: solo para "hoy" y "ahora". Bordes irregulares, sin imagenes. */
+.mark {
+  color: var(--mark-ink);
+  padding: 0 0.28em;
+  margin: 0 -0.08em;
+  background: linear-gradient(
+    100deg,
+    transparent 0.12em,
+    var(--mark) 0.3em,
+    var(--mark) calc(100% - 0.26em),
+    transparent calc(100% - 0.1em)
+  );
+  border-radius: 0.5em 0.25em 0.6em 0.3em / 0.35em 0.6em 0.3em 0.55em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+/* Hoja: <dialog class="sheet"> + showModal(). Inferior en movil, centrada en escritorio. */
+.sheet {
+  width: 100%;
+  max-width: 100%;
+  max-height: calc(100dvh - var(--safe-top) - var(--sp-6));
+  margin: auto 0 0;
+  padding: var(--sp-5) var(--sp-4) calc(var(--sp-5) + var(--safe-bottom));
+  border: 0;
+  border-radius: var(--r-l) var(--r-l) 0 0;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-float);
+  overflow: auto;
+}
+.sheet::backdrop {
+  background: rgb(15 20 26 / 0.4);
+}
+.sheet[open] {
+  animation: sheet-up var(--dur) var(--ease);
+}
+@media (min-width: 768px) {
+  .sheet {
+    width: min(32rem, 100% - 2 * var(--sp-5));
+    margin: auto;
+    padding: var(--sp-5);
+    border-radius: var(--r-l);
+  }
+  .sheet[open] {
+    animation-name: sheet-fade;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@keyframes sheet-fade {
+  from {
+    transform: scale(0.97);
+    opacity: 0;
+  }
+}
+
+.muted {
+  color: var(--ink-2);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

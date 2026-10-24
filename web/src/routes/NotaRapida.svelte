@@ -72,7 +72,7 @@
   });
 </script>
 
-<div class="container">
+<div class="quick">
   <h1>{title}</h1>
   {#if saved}<Banner kind="info">Nota guardada</Banner>{/if}
   {#if error}<Banner kind="error">{error}</Banner>{/if}
@@ -86,71 +86,42 @@
   ></textarea>
   <ExpiryPicker bind:mode bind:days idPrefix="nr" />
   <div class="actions">
-    <button class="save" onclick={handleSave} disabled={saving || saved}>
+    <button class="btn btn-primary save" onclick={handleSave} disabled={saving || saved}>
       {saving ? 'Guardando...' : 'Guardar'}
     </button>
-    <button onclick={handleCancel} class="secondary">Cancelar</button>
+    <button class="btn btn-quiet" onclick={handleCancel}>Cancelar</button>
   </div>
 </div>
 
 <style>
-  .container {
-    padding: 1rem;
+  .quick {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: var(--sp-4);
+    max-width: 40rem;
   }
 
   h1 {
-    margin: 0;
+    font-size: var(--fs-xl);
+    font-weight: 600;
+    color: var(--ink-2);
   }
 
   textarea {
-    flex: 1;
-    min-height: 160px;
-    padding: 0.5rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-family: inherit;
-    font-size: 1rem;
+    min-height: 40dvh;
+    padding: var(--sp-4);
+    border-radius: var(--r-m);
+    font-size: var(--fs-l);
   }
 
   .actions {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--sp-2);
   }
 
-  button {
-    padding: 0.75rem 1.5rem;
-    min-height: 48px;
-    background-color: #4285f4;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1rem;
-  }
-
-  button.save {
+  .save {
     flex: 1;
     min-height: 56px;
-    font-size: 1.15rem;
-    font-weight: 600;
-  }
-
-  button:disabled {
-    opacity: 0.6;
-  }
-
-  button:hover:not(:disabled) {
-    background-color: #357ae8;
-  }
-
-  button.secondary {
-    background-color: #999;
-  }
-
-  button.secondary:hover {
-    background-color: #666;
+    font-size: var(--fs-l);
   }
 </style>

@@ -5,6 +5,7 @@
   import { session, meInfo } from '../lib/auth';
   import { ApiError, logout } from '../lib/api';
   import Banner from '../components/Banner.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
   import {
     duplicateColors,
     fetchCalendars,
@@ -24,8 +25,6 @@
     startGoogleConnect,
     takeGoogleResult,
   } from '../lib/google';
-
-  let title = 'Ajustes';
 
   let google = $state<GoogleStatus | null>(null);
   let loading = $state(true);
@@ -238,61 +237,79 @@
   });
 </script>
 
-<div class="container">
-  <h1>{title}</h1>
-  <p>Configuración y preferencias.</p>
-  <section aria-label="Sesión">
-    <p>
-      Sesión: <strong>{$session ? 'conectado' : 'sin sesión'}</strong>
-      {#if $meInfo}
-        <small>(servidor v{$meInfo.version}, {$meInfo.tz})</small>
-      {/if}
-    </p>
-    <button type="button" onclick={() => logout()}>Cerrar sesión</button>
+<PageHeader title="Ajustes" />
+
+<div class="page">
+  <section class="group" aria-labelledby="sesion-title">
+    <h2 id="sesion-title">Sesión</h2>
+    <ul class="list">
+      <li class="row">
+        <div class="grow">
+          <p>
+            Sesión: <strong>{$session ? 'conectado' : 'sin sesión'}</strong>
+          </p>
+          {#if $meInfo}
+            <p class="muted small">Servidor v{$meInfo.version}, {$meInfo.tz}</p>
+          {/if}
+        </div>
+        <button type="button" class="btn btn-quiet danger" onclick={() => logout()}>
+          Cerrar sesión
+        </button>
+      </li>
+    </ul>
   </section>
 
-  <section class="google" aria-labelledby="google-title" aria-busy={loading || busy}>
+  <section class="group" aria-labelledby="google-title" aria-busy={loading || busy}>
     <h2 id="google-title">Google Calendar</h2>
 
     {#if notice}
-      <p
-        class={notice.kind === 'ok' ? 'notice ok' : 'notice error'}
-        role={notice.kind === 'ok' ? 'status' : 'alert'}
-      >
-        {notice.text}
-      </p>
+      <Banner kind={notice.kind === 'ok' ? 'info' : 'error'}>{notice.text}</Banner>
     {/if}
 
     {#if loading && !google}
-      <p role="status">Comprobando conexión con Google...</p>
+      <p role="status" class="muted">Comprobando conexión con Google...</p>
     {:else if statusError}
-      <p class="notice error" role="alert">{statusError}</p>
-      <button type="button" onclick={() => loadStatus()}>Reintentar</button>
+      <Banner kind="error">{statusError}</Banner>
+      <button type="button" class="btn" onclick={() => loadStatus()}>Reintentar</button>
     {:else if google}
       {#if !google.configured}
-        <p>El servidor todavía no tiene configurada la conexión con Google.</p>
+        <p class="muted">El servidor todavía no tiene configurada la conexión con Google.</p>
       {:else if google.connected}
-        <p>Estado: <strong>Conectado</strong></p>
-        {#if google.scopes.length > 0}
-          <p class="muted">Permisos concedidos:</p>
-          <ul class="scopes">
-            {#each google.scopes as scope (scope)}
-              <li>{scopeLabel(scope)}</li>
-            {/each}
-          </ul>
-        {/if}
-        {#if google.lastError}
-          <p class="muted">Último error: {google.lastError}</p>
-        {/if}
-        <button type="button" class="secondary" disabled={busy} onclick={disconnect}>
-          Desconectar Google
-        </button>
+        <ul class="list">
+          <li class="row">
+            <span class="status ok" aria-hidden="true"></span>
+            <p class="grow">Estado: <strong>Conectado</strong></p>
+            <button type="button" class="btn btn-quiet danger" disabled={busy} onclick={disconnect}>
+              Desconectar Google
+            </button>
+          </li>
+          {#if google.scopes.length > 0}
+            <li class="row col">
+              <p class="muted small">Permisos concedidos:</p>
+              <ul class="scopes">
+                {#each google.scopes as scope (scope)}
+                  <li>{scopeLabel(scope)}</li>
+                {/each}
+              </ul>
+            </li>
+          {/if}
+          {#if google.lastError}
+            <li class="row"><p class="muted small">Último error: {google.lastError}</p></li>
+          {/if}
+        </ul>
       {:else}
-        <p>Estado: <strong>Desconectado</strong>. {disconnectedMessage(google.reason)}</p>
-        <button type="button" class="primary" disabled={busy} onclick={connect}>
-          {busy ? 'Abriendo Google...' : 'Conectar Google'}
-        </button>
-        <p class="muted hint">
+        <ul class="list">
+          <li class="row">
+            <span class="status off" aria-hidden="true"></span>
+            <p class="grow">
+              Estado: <strong>Desconectado</strong>. {disconnectedMessage(google.reason)}
+            </p>
+            <button type="button" class="btn btn-primary" disabled={busy} onclick={connect}>
+              {busy ? 'Abriendo Google...' : 'Conectar Google'}
+            </button>
+          </li>
+        </ul>
+        <p class="help">
           Si al volver de Google ves una pantalla de login o una vista de navegador aparte,
           ciérrala y abre la app desde el icono; la conexión se guarda igualmente.
         </p>
@@ -301,27 +318,32 @@
   </section>
 
   {#if google?.connected}
-    <section class="calendars" aria-labelledby="cal-title" aria-busy={calLoading || calRefreshing}>
+    <section class="group" aria-labelledby="cal-title" aria-busy={calLoading || calRefreshing}>
       <h2 id="cal-title">Calendarios</h2>
-      <p class="muted hint">
+      <p class="help top">
         Los eventos se sincronizan en ambos sentidos con Google; notas, avisos y colores se quedan
         solo en la app.
       </p>
-      <button
-        type="button"
-        class="primary"
-        disabled={calRefreshing || calLoading}
-        onclick={refreshFromGoogle}
-      >
-        {calRefreshing ? 'Actualizando...' : 'Actualizar desde Google'}
-      </button>
-      <button type="button" class="primary" disabled={syncing || calLoading || cooldown > 0} onclick={syncAndReload}>
-        {syncing ? 'Sincronizando...' : cooldown > 0 ? `Espera ${cooldown}s` : 'Sincronizar ahora'}
-      </button>
+      <div class="toolbar">
+        <button
+          type="button"
+          class="btn"
+          disabled={calRefreshing || calLoading}
+          onclick={refreshFromGoogle}
+        >
+          {calRefreshing ? 'Actualizando...' : 'Actualizar desde Google'}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          disabled={syncing || calLoading || cooldown > 0}
+          onclick={syncAndReload}
+        >
+          {syncing ? 'Sincronizando...' : cooldown > 0 ? `Espera ${cooldown}s` : 'Sincronizar ahora'}
+        </button>
+      </div>
       {#if syncMsg}
-        <p class={`notice ${syncMsg.kind}`} role={syncMsg.kind === 'ok' ? 'status' : 'alert'}>
-          {syncMsg.text}
-        </p>
+        <Banner kind={syncMsg.kind === 'ok' ? 'info' : 'error'}>{syncMsg.text}</Banner>
       {/if}
       {#each duplicates as names (names.join('|'))}
         <Banner kind="warning">
@@ -330,27 +352,28 @@
         </Banner>
       {/each}
       {#if calNotice}
-        <p class="notice ok" role="status">{calNotice}</p>
+        <Banner kind="info">{calNotice}</Banner>
       {/if}
       {#if calError}
-        <p class="notice error" role="alert">{calError}</p>
+        <Banner kind="error">{calError}</Banner>
       {/if}
       {#if calLoading && calendars.length === 0}
-        <p role="status">Cargando calendarios...</p>
+        <p role="status" class="muted">Cargando calendarios...</p>
       {:else if calLoaded && calendars.length === 0 && !calError}
         <p class="muted">No hay calendarios.</p>
       {/if}
       {#if calendars.length > 0}
-        <ul class="cal-list" aria-label="Lista de calendarios">
+        <ul class="list cal-list" aria-label="Lista de calendarios">
           {#each calendars as cal (cal.id)}
             <li class="cal">
               <div class="cal-head">
                 <span class="dot" style:background-color={cal.color} aria-hidden="true"></span>
                 <span class="cal-name">{cal.name}</span>
                 {#if roleLabel(cal)}
-                  <span class="badge">{roleLabel(cal)}</span>
+                  <span class="pill">{roleLabel(cal)}</span>
                 {/if}
                 <label class="switch">
+                  <span class="muted small">{cal.visible ? 'Visible' : 'Oculto'}</span>
                   <input
                     type="checkbox"
                     role="switch"
@@ -359,14 +382,11 @@
                     aria-label={`Mostrar ${cal.name}`}
                     onchange={(e) => saveCalendar(cal, { visible: e.currentTarget.checked })}
                   />
-                  <span class="muted">{cal.visible ? 'Visible' : 'Oculto'}</span>
                 </label>
               </div>
-              <p class="muted sync-line">
-                Última sync: {formatAgo(cal.lastSyncedAt)}
-              </p>
+              <p class="muted small">Última sync: {formatAgo(cal.lastSyncedAt)}</p>
               {#if cal.lastSyncError}
-                <p class="notice error" role="alert">Error de sincronización: {cal.lastSyncError}</p>
+                <p class="small err" role="alert">Error de sincronización: {cal.lastSyncError}</p>
               {/if}
               <div class="swatches" role="group" aria-label={`Color de ${cal.name}`}>
                 {#each CALENDAR_PALETTE as color (color)}
@@ -374,7 +394,7 @@
                     type="button"
                     class="swatch"
                     class:selected={cal.color.toLowerCase() === color}
-                    style:background-color={color}
+                    style="--c: {color}"
                     aria-label={`Color ${color} para ${cal.name}`}
                     disabled={syncing}
                     aria-pressed={cal.color.toLowerCase() === color}
@@ -382,7 +402,7 @@
                   ></button>
                 {/each}
                 <label class="custom">
-                  <span class="muted">Personalizado</span>
+                  <span class="muted small">Personalizado</span>
                   <input
                     type="color"
                     value={cal.color}
@@ -398,191 +418,233 @@
       {/if}
     </section>
   {:else if google && !google.connected && google.configured}
-    <section class="calendars" aria-labelledby="cal-title">
+    <section class="group" aria-labelledby="cal-title">
       <h2 id="cal-title">Calendarios</h2>
       <p class="muted">Conecta Google para ver y configurar tus calendarios.</p>
     </section>
   {/if}
 
-  <ul>
-    <li>Notificaciones push</li>
-    <li>Preferencias visuales</li>
-    <li>Información de la app</li>
-  </ul>
+  <section class="group" aria-labelledby="more-title">
+    <h2 id="more-title">Más ajustes</h2>
+    <ul class="list soon">
+      <li class="row"><span class="grow">Notificaciones push</span><span class="small">Próximamente</span></li>
+      <li class="row"><span class="grow">Preferencias visuales</span><span class="small">Próximamente</span></li>
+      <li class="row"><span class="grow">Información de la app</span><span class="small">Próximamente</span></li>
+    </ul>
+  </section>
 </div>
 
 <style>
-  .container {
-    padding: 1rem;
+  .page {
+    display: grid;
+    gap: var(--sp-6);
   }
-
-  h1 {
-    margin: 0 0 1rem 0;
+  .group h2 {
+    font-size: var(--fs-l);
+    margin: 0 0 var(--sp-2) var(--sp-1);
   }
-
-  h2 {
-    margin: 0 0 0.5rem 0;
-    font-size: 1.15rem;
+  .group > :global(.banner),
+  .group > .toolbar,
+  .group > .btn {
+    margin-bottom: var(--sp-3);
   }
-
-  section {
-    margin-bottom: 1.25rem;
+  .help {
+    margin: var(--sp-2) var(--sp-4) 0;
+    font-size: var(--fs-s);
+    color: var(--ink-2);
   }
-
-  .google {
-    padding: 0.75rem 0;
-    border-top: 1px solid #eee;
+  .help.top {
+    margin: 0 var(--sp-1) var(--sp-3);
   }
-
-  ul {
-    list-style: none;
-    padding: 0;
+  .small {
+    font-size: var(--fs-s);
   }
-
-  li {
-    padding: 0.75rem;
-    border-bottom: 1px solid #eee;
-  }
-
-  ul.scopes li {
-    padding: 0.25rem 0.75rem;
-    border-bottom: none;
-  }
-
-  small,
-  .muted {
-    color: #666;
-  }
-
-  .hint {
-    font-size: 0.85rem;
-  }
-
-  .notice {
-    padding: 0.5rem 0.75rem;
-    border-radius: 4px;
-  }
-
-  .notice.ok {
-    background: #e6f4ea;
-    color: #1e4620;
-  }
-
-  .notice.error {
-    background: #fdecea;
-    color: #8a1c13;
-  }
-
-  button {
-    padding: 0.5rem 1rem;
-    background-color: #757575;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    min-height: 44px;
-  }
-
-  button.primary {
-    background-color: #1a73e8;
-  }
-
-  button.secondary {
-    background-color: #b3261e;
-  }
-
-  .calendars {
-    padding: 0.75rem 0;
-    border-top: 1px solid #eee;
-  }
-
-  ul.cal-list li.cal {
-    padding: 0.75rem 0;
-  }
-
-  .cal-head {
+  .row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+    gap: var(--sp-3);
+    min-height: var(--tap);
+    padding: var(--sp-2) var(--sp-4);
   }
-
-  .cal-name {
-    font-weight: 600;
-    flex: 1 1 8rem;
+  .row.col {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--sp-1);
+  }
+  .grow {
+    flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
   }
-
-  .dot {
-    width: 1rem;
-    height: 1rem;
-    border-radius: 3px;
+  .soon .row {
+    color: var(--ink-2);
+  }
+  .scopes {
+    list-style: none;
+    padding: 0;
+    font-size: var(--fs-s);
+  }
+  .scopes li {
+    max-width: none;
+  }
+  .status {
     flex: none;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .status.ok {
+    background: var(--ok);
+  }
+  .status.off {
+    background: var(--ink-2);
+  }
+  .danger {
+    color: var(--danger);
+  }
+  .danger:hover {
+    background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  }
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+  .err {
+    color: var(--danger);
+    margin-top: var(--sp-1);
   }
 
-  .badge {
-    font-size: 0.75rem;
-    padding: 0.1rem 0.5rem;
+  .cal {
+    padding: var(--sp-3) var(--sp-4);
+  }
+  .cal-head {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
+  }
+  .dot {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
+  }
+  .cal-name {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .pill {
+    flex: none;
+    padding: 0 var(--sp-2);
     border-radius: 999px;
-    background: #eee;
-    color: #444;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    font-size: var(--fs-xs);
   }
-
   .switch {
+    flex: none;
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    min-height: 44px;
+    gap: var(--sp-2);
+    min-height: var(--tap);
+    font-weight: 400;
   }
-
+  /* Interruptor estilo iOS sobre el checkbox role=switch */
   .switch input {
-    width: 1.25rem;
-    height: 1.25rem;
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: 51px;
+    height: 31px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--ink-2);
+    cursor: pointer;
+    transition: background-color var(--dur) var(--ease);
   }
-
+  .switch input::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: var(--surface);
+    transition: transform var(--dur) var(--ease);
+  }
+  .switch input:checked {
+    background: var(--ok);
+  }
+  .switch input:checked::after {
+    transform: translateX(20px);
+  }
+  .switch input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
   .swatches {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.4rem;
-    margin-top: 0.4rem;
+    margin: var(--sp-1) calc(-1 * var(--sp-2)) 0;
   }
-
-  button.swatch {
-    width: 32px;
-    height: 32px;
-    min-height: 32px;
+  /* Objetivo de 44px; el circulo visible es el pseudo-elemento */
+  .swatch {
+    position: relative;
+    width: var(--tap);
+    height: var(--tap);
     padding: 0;
+    border: 0;
+    background: none;
+  }
+  .swatch::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
     border-radius: 50%;
-    border: 2px solid transparent;
+    background: var(--c);
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
   }
-
-  button.swatch.selected {
-    border-color: #111;
-    outline: 2px solid #fff;
-    outline-offset: -4px;
+  .swatch.selected::before {
+    box-shadow:
+      0 0 0 2px var(--surface),
+      0 0 0 4px var(--ink);
   }
-
-  .sync-line {
-    margin: 0.3rem 0 0;
-    font-size: 0.85rem;
+  .swatch:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
-
   .custom {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    margin-left: 0.5rem;
+    gap: var(--sp-2);
+    margin-left: var(--sp-2);
+    font-weight: 400;
   }
-
   .custom input {
-    width: 44px;
-    height: 32px;
+    width: var(--tap);
+    height: var(--tap);
     padding: 0;
   }
 
-  button:disabled {
-    opacity: 0.6;
+  @media (min-width: 1024px) {
+    .cal-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--sp-3);
+      background: none;
+    }
+    .cal-list > li {
+      background: var(--surface);
+      border-radius: var(--r-m);
+    }
+    .cal-list > li + li {
+      border-top: 0;
+    }
   }
 </style>

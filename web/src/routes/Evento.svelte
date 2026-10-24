@@ -8,6 +8,7 @@
     type EventMetaScope,
   } from '@organizador/shared';
   import Banner from '../components/Banner.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
   import { ApiError } from '../lib/api';
   import { fetchCalendars } from '../lib/calendars';
   import {
@@ -222,414 +223,544 @@
   });
 </script>
 
-<div class="container">
-  <button type="button" class="back" onclick={back}>&larr; Volver</button>
+<div class="page">
+  <button type="button" class="btn btn-quiet back" aria-label="Volver atrás" onclick={back}>
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+      <path
+        d="M15 5l-7 7 7 7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+    Volver
+  </button>
 
   {#if loading && !event}
-    <p role="status">Cargando...</p>
+    <PageHeader title="Evento" />
+    <p role="status" class="muted">Cargando...</p>
   {:else if notFound}
+    <PageHeader title="Evento" />
     <Banner kind="error">El evento ya no existe.</Banner>
   {:else if loadError}
+    <PageHeader title="Evento" />
     <Banner kind="error">{loadError}</Banner>
-    <button type="button" class="secondary" onclick={() => load()}>Reintentar</button>
+    <button type="button" class="btn" onclick={() => load()}>Reintentar</button>
   {:else if event}
-    <h1>{title}</h1>
+    <PageHeader {title} />
 
-    <section class="card" aria-labelledby="ev-datos">
-      <h2 id="ev-datos">Datos de Google Calendar</h2>
-      <dl>
-        <dt>Fecha y hora</dt>
-        <dd>{formatWhen(event)}</dd>
-        {#if event.location}
-          <dt>Lugar</dt>
-          <dd class="text">{event.location}</dd>
-        {/if}
-        <dt>Calendario</dt>
-        <dd>
-          <span class="dot" style:background={calColor} aria-hidden="true"></span>
-          {calendar?.name ?? calendarId}
-        </dd>
-      </dl>
-      <p class="marks">
-        {#if event.origin === 'app'}<span class="badge">Creado en la app</span>{/if}
-        {#if event.status === 'tentative'}<span class="badge">Provisional</span>{/if}
-      </p>
-      {#if event.pending && event.pending.error}
-        <p class="err" role="alert">
-          No se pudo enviar a Google: {event.pending.error}. Se reintentará.
-        </p>
-      {:else if event.pending}
-        <p class="muted" role="status">Pendiente de enviar a Google.</p>
-      {/if}
-      <h3>Descripción (de Google Calendar)</h3>
-      {#if event.description}
-        <p class="text">{event.description}</p>
-      {:else}
-        <p class="muted">Sin descripción.</p>
-      {/if}
-    </section>
-
-    <section class="card private" aria-labelledby="ev-priv">
-      <h2 id="ev-priv">Notas privadas (solo en la app)</h2>
-      <p class="muted">Estos datos no se envían a Google Calendar.</p>
-
-      <p class="marks">
-        {#if event.metaScopes?.instance}
-          <span class="badge">Personalizado en esta instancia</span>
-        {/if}
-        {#if event.metaScopes?.series}
-          <span class="badge">Personalizado en la serie</span>
-        {/if}
-      </p>
-
-      {#each shadowed as f (f)}
-        <p class="warn" data-testid="shadow-warning">
-          Esta instancia tiene {SHADOW_TEXT[f]}.
-        </p>
-      {/each}
-
-      <form
-        onsubmit={(ev) => {
-          ev.preventDefault();
-          save();
-        }}
-      >
-        <div class="field">
-          <label for="ev-notes">Notas</label>
-          <textarea
-            id="ev-notes"
-            rows="5"
-            maxlength={LIMITS.notesMaxLength}
-            bind:value={form.notes}
-            oninput={() => edited('notes')}
-            disabled={busy !== ''}
-          ></textarea>
-          <p class="hint">
-            Dejarlo vacío guarda una nota vacía{recurring && scope === 'instance'
-              ? ' en esta instancia (tapa la nota de la serie)'
-              : ''}. Para volver al valor anterior usa «{inheritLabel}».
-          </p>
-          {#if stored && stored.notes !== null}
-            <button
-              type="button"
-              class="secondary"
-              aria-pressed={!!inherit.notes}
-              onclick={() => toggleInherit('notes')}
-              disabled={busy !== ''}
-            >
-              {inherit.notes ? 'Se quitará la nota propia (deshacer)' : inheritLabel + ' (nota)'}
-            </button>
-          {/if}
-        </div>
-
-        <div class="field">
-          <label class="check">
-            <input
-              type="checkbox"
-              bind:checked={form.remind}
-              onchange={() => edited('remind')}
-              disabled={busy !== ''}
-            />
-            Avisar
-          </label>
-          {#if stored && stored.remind !== null}
-            <button
-              type="button"
-              class="secondary"
-              aria-pressed={!!inherit.remind}
-              onclick={() => toggleInherit('remind')}
-              disabled={busy !== ''}
-            >
-              {inherit.remind ? 'Se quitará el aviso propio (deshacer)' : inheritLabel + ' (aviso)'}
-            </button>
-          {/if}
-        </div>
-
-        {#if form.remind}
-          <div class="field">
-            <label for="ev-days">Días de antelación</label>
-            <input
-              id="ev-days"
-              type="number"
-              inputmode="numeric"
-              min={LIMITS.remindDaysMin}
-              max={LIMITS.remindDaysMax}
-              step="1"
-              value={Number.isNaN(form.days) ? '' : form.days}
-              oninput={onDays}
-              disabled={busy !== ''}
-            />
-            {#if !daysValid}
-              <p class="err" role="alert">
-                Indica un número entero entre {LIMITS.remindDaysMin} y {LIMITS.remindDaysMax}.
-              </p>
+    <div class="cols">
+      <section class="panel" aria-labelledby="ev-datos">
+        <h2 id="ev-datos">Datos de Google Calendar</h2>
+        <div class="head">
+          <span class="bar" style="--c: {calColor}" aria-hidden="true"></span>
+          <div class="head-text">
+            <p class="when num"><time>{formatWhen(event)}</time></p>
+            {#if event.location}
+              <p class="text where">{event.location}</p>
             {/if}
+            <p class="cal-name muted">{calendar?.name ?? calendarId}</p>
           </div>
+        </div>
+        {#if event.origin === 'app' || event.status === 'tentative'}
+          <p class="marks">
+            {#if event.origin === 'app'}<span class="pill">Creado en la app</span>{/if}
+            {#if event.status === 'tentative'}<span class="pill">Provisional</span>{/if}
+          </p>
+        {/if}
+        {#if event.pending && event.pending.error}
+          <p class="err" role="alert">
+            No se pudo enviar a Google: {event.pending.error}. Se reintentará.
+          </p>
+        {:else if event.pending}
+          <p class="muted" role="status">Pendiente de enviar a Google.</p>
+        {/if}
+        <h3>Descripción (de Google Calendar)</h3>
+        {#if event.description}
+          <p class="text">{event.description}</p>
+        {:else}
+          <p class="muted">Sin descripción.</p>
+        {/if}
+      </section>
+
+      <section class="panel private" aria-labelledby="ev-priv">
+        <h2 id="ev-priv">Notas privadas (solo en la app)</h2>
+        <p class="muted">Estos datos no se envían a Google Calendar.</p>
+
+        {#if event.metaScopes?.instance || event.metaScopes?.series}
+          <p class="marks">
+            {#if event.metaScopes?.instance}
+              <span class="pill">Personalizado en esta instancia</span>
+            {/if}
+            {#if event.metaScopes?.series}
+              <span class="pill">Personalizado en la serie</span>
+            {/if}
+          </p>
         {/if}
 
-        <fieldset class="field">
-          <legend>Color</legend>
-          <div class="palette">
-            <button
-              type="button"
-              class="swatch"
-              aria-pressed={form.color === null}
-              aria-label="Sin color propio"
-              title="Sin color propio"
-              onclick={() => pickColor(null)}
-              disabled={busy !== ''}>&times;</button
-            >
-            {#each CALENDAR_PALETTE as c (c)}
+        {#each shadowed as f (f)}
+          <p class="help warn" data-testid="shadow-warning">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M12 11v5M12 8v.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+            <span>Esta instancia tiene {SHADOW_TEXT[f]}.</span>
+          </p>
+        {/each}
+
+        <form
+          onsubmit={(ev) => {
+            ev.preventDefault();
+            save();
+          }}
+        >
+          {#if recurring}
+            <fieldset class="field">
+              <legend>Guardar en</legend>
+              <div class="segmented">
+                <label class:on={scope === 'instance'}>
+                  <input
+                    type="radio"
+                    name="scope"
+                    value="instance"
+                    checked={scope === 'instance'}
+                    onchange={(ev) => setScope('instance', ev)}
+                    disabled={busy !== ''}
+                  />
+                  Solo esta instancia
+                </label>
+                <label class:on={scope === 'series'}>
+                  <input
+                    type="radio"
+                    name="scope"
+                    value="series"
+                    checked={scope === 'series'}
+                    onchange={(ev) => setScope('series', ev)}
+                    disabled={busy !== ''}
+                  />
+                  Toda la serie
+                </label>
+              </div>
+            </fieldset>
+          {/if}
+
+          <div class="field">
+            <label for="ev-notes">Notas</label>
+            <textarea
+              id="ev-notes"
+              rows="5"
+              maxlength={LIMITS.notesMaxLength}
+              bind:value={form.notes}
+              oninput={() => edited('notes')}
+              disabled={busy !== ''}
+            ></textarea>
+            <p class="help">
+              Dejarlo vacío guarda una nota vacía{recurring && scope === 'instance'
+                ? ' en esta instancia (tapa la nota de la serie)'
+                : ''}. Para volver al valor anterior usa «{inheritLabel}».
+            </p>
+            {#if stored && stored.notes !== null}
               <button
                 type="button"
-                class="swatch"
-                style:background={c}
-                aria-pressed={form.color?.toLowerCase() === c}
-                aria-label={`Color ${c}`}
-                onclick={() => pickColor(c)}
+                class="btn btn-quiet"
+                aria-pressed={!!inherit.notes}
+                onclick={() => toggleInherit('notes')}
                 disabled={busy !== ''}
-              ></button>
-            {/each}
-            <label class="custom">
-              Personalizado
-              <input
-                type="color"
-                value={form.color && !paletteHas ? form.color : '#1a73e8'}
-                oninput={onCustomColor}
-                disabled={busy !== ''}
-              />
-            </label>
+              >
+                {inherit.notes ? 'Se quitará la nota propia (deshacer)' : inheritLabel + ' (nota)'}
+              </button>
+            {/if}
           </div>
-          <p class="hint">
-            {form.color
-              ? `Color propio: ${form.color}`
-              : 'Sin color propio (se usa el del calendario).'}
-          </p>
-        </fieldset>
 
-        {#if recurring}
-          <fieldset class="field">
-            <legend>Guardar en</legend>
-            <label class="check">
+          <div class="field">
+            <label class="switch">
+              Avisar
               <input
-                type="radio"
-                name="scope"
-                value="instance"
-                checked={scope === 'instance'}
-                onchange={(ev) => setScope('instance', ev)}
+                type="checkbox"
+                role="switch"
+                bind:checked={form.remind}
+                onchange={() => edited('remind')}
                 disabled={busy !== ''}
               />
-              Solo esta instancia
             </label>
-            <label class="check">
+            {#if stored && stored.remind !== null}
+              <button
+                type="button"
+                class="btn btn-quiet"
+                aria-pressed={!!inherit.remind}
+                onclick={() => toggleInherit('remind')}
+                disabled={busy !== ''}
+              >
+                {inherit.remind ? 'Se quitará el aviso propio (deshacer)' : inheritLabel + ' (aviso)'}
+              </button>
+            {/if}
+          </div>
+
+          {#if form.remind}
+            <div class="field">
+              <label for="ev-days">Días de antelación</label>
               <input
-                type="radio"
-                name="scope"
-                value="series"
-                checked={scope === 'series'}
-                onchange={(ev) => setScope('series', ev)}
+                id="ev-days"
+                class="days num"
+                type="number"
+                inputmode="numeric"
+                min={LIMITS.remindDaysMin}
+                max={LIMITS.remindDaysMax}
+                step="1"
+                value={Number.isNaN(form.days) ? '' : form.days}
+                oninput={onDays}
                 disabled={busy !== ''}
               />
-              Toda la serie
-            </label>
-          </fieldset>
-        {/if}
-
-        {#if saveError}<p class="err" role="alert">{saveError}</p>{/if}
-        {#if saveOk}<p class="ok" role="status">{saveOk}</p>{/if}
-
-        <div class="actions">
-          <button type="submit" disabled={!canSave}>
-            {busy === 'save' ? 'Guardando...' : 'Guardar'}
-          </button>
-          {#if stored}
-            <button type="button" class="secondary" onclick={clearScope} disabled={busy !== ''}>
-              Quitar personalización{recurring
-                ? scope === 'instance'
-                  ? ' de esta instancia'
-                  : ' de la serie'
-                : ''}
-            </button>
+              {#if !daysValid}
+                <p class="err" role="alert">
+                  Indica un número entero entre {LIMITS.remindDaysMin} y {LIMITS.remindDaysMax}.
+                </p>
+              {/if}
+            </div>
           {/if}
-        </div>
-      </form>
-    </section>
+
+          <fieldset class="field">
+            <legend>Color</legend>
+            <div class="palette">
+              <button
+                type="button"
+                class="swatch none"
+                aria-pressed={form.color === null}
+                aria-label="Sin color propio"
+                title="Sin color propio"
+                onclick={() => pickColor(null)}
+                disabled={busy !== ''}>&times;</button
+              >
+              {#each CALENDAR_PALETTE as c (c)}
+                <button
+                  type="button"
+                  class="swatch"
+                  style="--c: {c}"
+                  aria-pressed={form.color?.toLowerCase() === c}
+                  aria-label={`Color ${c}`}
+                  onclick={() => pickColor(c)}
+                  disabled={busy !== ''}
+                ></button>
+              {/each}
+              <label class="custom">
+                Personalizado
+                <input
+                  type="color"
+                  value={form.color && !paletteHas ? form.color : '#1a73e8'}
+                  oninput={onCustomColor}
+                  disabled={busy !== ''}
+                />
+              </label>
+            </div>
+            <p class="help">
+              {form.color
+                ? `Color propio: ${form.color}`
+                : 'Sin color propio (se usa el del calendario).'}
+            </p>
+          </fieldset>
+
+          {#if saveError}<p class="err" role="alert">{saveError}</p>{/if}
+          {#if saveOk}<p class="ok" role="status">{saveOk}</p>{/if}
+
+          <div class="actions">
+            {#if stored}
+              <button type="button" class="btn btn-quiet" onclick={clearScope} disabled={busy !== ''}>
+                Quitar personalización{recurring
+                  ? scope === 'instance'
+                    ? ' de esta instancia'
+                    : ' de la serie'
+                  : ''}
+              </button>
+            {/if}
+            <button type="submit" class="btn btn-primary save" disabled={!canSave}>
+              {busy === 'save' ? 'Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   {/if}
 
   {#if notFound}
-    <button type="button" class="secondary" onclick={back}>Volver</button>
+    <button type="button" class="btn" onclick={back}>Volver</button>
   {/if}
 </div>
 
 <style>
-  .container {
-    padding: 1rem;
-    max-width: 42rem;
+  .back {
+    margin-left: calc(-1 * var(--sp-3));
+    margin-bottom: var(--sp-2);
+    padding: 0 var(--sp-3) 0 var(--sp-2);
+    gap: var(--sp-1);
   }
-  h1 {
-    margin: 0.5rem 0 1rem;
+  .cols {
+    display: grid;
+    gap: var(--sp-5);
+    align-items: start;
+  }
+  .panel {
+    padding: var(--sp-4);
+    border-radius: var(--r-m);
+    background: var(--surface);
+  }
+  .panel h2 {
+    font-size: var(--fs-l);
+    margin-bottom: var(--sp-3);
+  }
+  .panel h3 {
+    font-size: var(--fs-m);
+    margin: var(--sp-5) 0 var(--sp-1);
+  }
+  /* Marca sutil: esto se queda en la app y no va a Google */
+  .private {
+    background: var(--accent-soft);
+    border-left: 4px solid var(--accent);
+  }
+  .head {
+    display: flex;
+    gap: var(--sp-3);
+  }
+  .head-text {
+    min-width: 0;
+  }
+  .when {
+    font-family: var(--font-display);
+    font-size: var(--fs-xl);
+    font-weight: 700;
+    line-height: var(--lh-display);
     overflow-wrap: anywhere;
   }
-  h2 {
-    font-size: 1.1rem;
-    margin: 0 0 0.5rem;
+  .where {
+    margin-top: var(--sp-1);
+    font-size: var(--fs-l);
   }
-  h3 {
-    font-size: 0.95rem;
-    margin: 1rem 0 0.25rem;
-  }
-  .card {
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-  }
-  .card.private {
-    border-color: #188038;
-    background: #f4faf5;
-  }
-  dl {
-    margin: 0;
-  }
-  dt {
-    font-size: 0.8rem;
-    color: #666;
-    margin-top: 0.5rem;
-  }
-  dd {
-    margin: 0;
-    overflow-wrap: anywhere;
+  .cal-name {
+    margin-top: var(--sp-1);
+    font-size: var(--fs-s);
   }
   .text {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    margin: 0;
-  }
-  .dot {
-    display: inline-block;
-    width: 0.8rem;
-    height: 0.8rem;
-    border-radius: 50%;
-    margin-right: 0.3rem;
-  }
-  .muted,
-  .hint {
-    color: #666;
-    font-size: 0.85rem;
-    margin: 0.25rem 0;
-  }
-  .err {
-    color: #b3261e;
-    font-size: 0.9rem;
-  }
-  .warn {
-    color: #8a5300;
-    font-size: 0.9rem;
-    margin: 0.25rem 0;
-  }
-  .ok {
-    color: #188038;
   }
   .marks {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
-    margin: 0.4rem 0;
+    gap: var(--sp-2);
+    margin: var(--sp-3) 0;
   }
-  .badge {
-    font-size: 0.75rem;
-    padding: 0.1rem 0.5rem;
+  .pill {
+    padding: 0 var(--sp-2);
     border-radius: 999px;
-    background: #e0e0e0;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink-2);
+    font-size: var(--fs-xs);
+  }
+  .help {
+    margin-top: var(--sp-1);
+    font-size: var(--fs-s);
+    color: var(--ink-2);
+  }
+  .help.warn {
+    display: flex;
+    gap: var(--sp-2);
+    align-items: flex-start;
+    margin: var(--sp-3) 0;
+  }
+  .help.warn svg {
+    flex: none;
+    margin-top: 2px;
+  }
+  .err {
+    color: var(--danger);
+    font-size: var(--fs-s);
+    margin-top: var(--sp-2);
+  }
+  .ok {
+    color: var(--ok);
+    margin-top: var(--sp-2);
   }
   .field {
-    margin: 0 0 1rem;
+    margin: 0 0 var(--sp-4);
     padding: 0;
-    border: none;
+    border: 0;
     min-width: 0;
   }
-  label,
+  .field > label,
   legend {
-    font-weight: 600;
+    display: block;
     padding: 0;
+    margin-bottom: var(--sp-1);
+    font-weight: 600;
   }
-  .check {
+  .days {
+    max-width: 8rem;
+  }
+
+  .segmented {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 3px;
+    border-radius: var(--r-s);
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+  .segmented label {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    min-height: 44px;
-    font-weight: normal;
-  }
-  .check input {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
-  textarea,
-  input[type='number'] {
-    display: block;
-    width: 100%;
-    font: inherit;
-    padding: 0.5rem;
-    border: 1px solid #aaa;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 var(--sp-2);
     border-radius: 4px;
+    text-align: center;
+    font-weight: 600;
+    font-size: var(--fs-s);
+    cursor: pointer;
   }
-  input[type='number'] {
-    max-width: 8rem;
-    min-height: 44px;
+  .segmented label.on {
+    background: var(--accent);
+    color: var(--accent-ink);
   }
+  .segmented input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .segmented label:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--tap);
+    font-weight: 600;
+  }
+  .switch input {
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: 51px;
+    height: 31px;
+    margin: 0;
+    border-radius: 999px;
+    background: var(--ink-2);
+    cursor: pointer;
+    transition: background-color var(--dur) var(--ease);
+  }
+  .switch input::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: var(--surface);
+    transition: transform var(--dur) var(--ease);
+  }
+  .switch input:checked {
+    background: var(--ok);
+  }
+  .switch input:checked::after {
+    transform: translateX(20px);
+  }
+  .switch input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .palette {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
     align-items: center;
+    margin: 0 calc(-1 * var(--sp-1));
   }
   .swatch {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    border: 2px solid #fff;
-    box-shadow: 0 0 0 1px #888;
+    position: relative;
+    width: var(--tap);
+    height: var(--tap);
     padding: 0;
-    background: #fff;
-    color: #555;
-    font-size: 1.2rem;
+    border: 0;
+    background: none;
+    color: var(--ink-2);
+    font-size: var(--fs-l);
   }
-  .swatch[aria-pressed='true'] {
-    box-shadow: 0 0 0 3px #1a73e8;
+  .swatch::before {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border-radius: 50%;
+    background: var(--c, var(--surface));
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
+  }
+  .swatch.none::before {
+    border: 1px dashed var(--ink-2);
+    box-shadow: none;
+  }
+  .swatch[aria-pressed='true']::before {
+    box-shadow:
+      0 0 0 2px var(--accent-soft),
+      0 0 0 4px var(--ink);
+  }
+  .swatch:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
   .custom {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    font-weight: normal;
+    gap: var(--sp-2);
+    margin-left: var(--sp-2);
+    font-weight: 400;
+    font-size: var(--fs-s);
   }
   .custom input {
-    width: 44px;
-    height: 44px;
+    width: var(--tap);
+    height: var(--tap);
     padding: 0;
   }
+
   .actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem;
+    align-items: center;
+    gap: var(--sp-2);
+    /* Pegajoso sobre la barra de pestanas; deja hueco al boton flotante de nota rapida */
+    position: sticky;
+    bottom: calc(var(--tabs-h, 60px) + var(--safe-bottom));
+    margin: 0 calc(-1 * var(--sp-4)) calc(-1 * var(--sp-4));
+    padding: var(--sp-3) calc(56px + var(--sp-5)) var(--sp-3) var(--sp-4);
+    background: var(--accent-soft);
+    border-top: 1px solid var(--line);
   }
-  button {
-    min-height: 44px;
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    background: #1a73e8;
-    color: #fff;
+  .save {
+    flex: 1;
   }
-  button.secondary,
-  button.back {
-    background: #eee;
-    color: #222;
-  }
-  button.swatch {
-    padding: 0;
-  }
-  button:disabled {
-    opacity: 0.6;
+
+  @media (min-width: 1024px) {
+    .cols {
+      grid-template-columns: 1fr 1fr;
+    }
+    .actions {
+      position: static;
+      justify-content: flex-end;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+    .save {
+      flex: none;
+    }
   }
 </style>

@@ -16,44 +16,58 @@
   } = $props();
 
   const shown = $derived(showEmpty ? days : days.filter((d) => byDay.has(d)));
+
+  const wdFmt = new Intl.DateTimeFormat('es-ES', { timeZone: 'UTC', weekday: 'long' });
+  const moFmt = new Intl.DateTimeFormat('es-ES', { timeZone: 'UTC', month: 'long' });
+  const at = (d: string) => new Date(`${d}T12:00:00Z`);
 </script>
 
-<div class="list">
+<div class="days">
   {#each shown as day (day)}
-    <section class="day" class:today={day === today} aria-label={formatDayLong(day)}>
-      <h3>{formatDayLong(day)}{day === today ? ' · hoy' : ''}</h3>
-      {#each byDay.get(day) ?? [] as ev (ev.calendarId + ev.id)}
-        <EventChip event={ev} {day} />
-      {:else}
-        <p class="none">Sin eventos</p>
-      {/each}
+    <section class="day" aria-label={formatDayLong(day)}>
+      <h3>
+        <span class="dn num" class:mark={day === today}>{Number(day.slice(8))}</span>
+        <span class="dw">{wdFmt.format(at(day))}</span>
+        <span class="dm muted">{moFmt.format(at(day))}</span>
+        {#if day === today}<span class="sr-only">(hoy)</span>{/if}
+      </h3>
+      <ul class="list">
+        {#each byDay.get(day) ?? [] as ev (ev.calendarId + ev.id)}
+          <li><EventChip event={ev} {day} /></li>
+        {:else}
+          <li><p class="list-row muted">Sin eventos</p></li>
+        {/each}
+      </ul>
     </section>
   {/each}
 </div>
 
 <style>
-  .list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  .day {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
+  .days {
+    display: grid;
+    gap: var(--sp-5);
   }
   h3 {
-    margin: 0.25rem 0 0;
-    font-size: 0.95rem;
-    text-transform: capitalize;
-    color: #555;
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-2);
+    padding: 0 var(--sp-1);
   }
-  .today h3 {
-    color: #1a73e8;
+  .dn {
+    font-size: var(--fs-xl);
+    font-weight: 800;
   }
-  .none {
-    margin: 0;
-    color: #999;
-    font-size: 0.9rem;
+  .dw {
+    font-size: var(--fs-m);
+    font-weight: 700;
+  }
+  .dw::first-letter {
+    text-transform: uppercase;
+  }
+  .dm {
+    font-family: var(--font-body);
+    font-size: var(--fs-s);
+    font-weight: 500;
   }
 </style>

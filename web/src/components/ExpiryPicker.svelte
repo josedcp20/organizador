@@ -30,26 +30,26 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--sp-2);
   }
 
-  select,
-  input {
-    min-height: 44px;
-    padding: 0.4rem 0.5rem;
-    font-size: 1rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-family: inherit;
+  .expiry label {
+    flex-basis: 100%;
+    font-size: var(--fs-s);
   }
 
-  input {
-    width: 5rem;
+  select {
+    flex: 1;
+    min-width: 12rem;
   }
 
   .days {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: var(--sp-2);
+  }
+
+  .days input {
+    width: 5.5rem;
   }
 </style>

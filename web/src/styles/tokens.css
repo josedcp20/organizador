@@ -1,0 +1,101 @@
+/* Tokens de diseno: "agenda de papel con rotulador". Guia: docs/diseno.md */
+
+/* Fuentes self-hosted, solo subset latin y eje wght (incluye a, n, acentos). */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url('@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2')
+    format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Color (claro). Contraste AA comprobado: ink-2 4.8:1 sobre bg, warn 4.9:1 sobre bg. */
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --ink: #17202b;
+  --ink-2: #5c6b7a;
+  --line: #d8dee5;
+  --accent: #2f5bea;
+  --accent-ink: #ffffff; /* texto sobre --accent y --danger */
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --mark: #ffd84d;
+  --mark-ink: #17202b; /* siempre oscuro, tambien en modo oscuro */
+  --danger: #c62828;
+  --warn: #955a00; /* #B26A00 no llegaba a 4.5:1 sobre bg */
+  --ok: #1e7a3c;
+  --shadow-float: 0 12px 32px rgb(15 20 26 / 0.16), 0 2px 6px rgb(15 20 26 / 0.08);
+
+  /* Tipografia */
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-s: 0.875rem;
+  --fs-m: 1rem;
+  --fs-l: clamp(1.125rem, 1.05rem + 0.35vw, 1.25rem);
+  --fs-xl: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem);
+  --fs-2xl: clamp(1.875rem, 1.5rem + 1.6vw, 2.5rem);
+  --fs-display: clamp(2.75rem, 2rem + 3.2vw, 4.25rem);
+  --lh-body: 1.5;
+  --lh-display: 1.1;
+  --measure: 68ch;
+
+  /* Espaciado */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* Radios por jerarquia: nunca el mismo en todo */
+  --r-s: 6px; /* controles pequenos */
+  --r-m: 12px; /* superficies agrupadas (.list) */
+  --r-l: 20px; /* hojas (.sheet) */
+
+  --tap: 44px; /* objetivo tactil minimo */
+  --dur: 180ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141a;
+    --surface: #171e26;
+    --surface-2: #1d2630;
+    --ink: #e8edf2;
+    --ink-2: #9aa8b6;
+    --line: #2a3541;
+    --accent: #7c9bff;
+    --accent-ink: #0f141a;
+    --danger: #ff8a80;
+    --warn: #f0b44c;
+    --ok: #6fcf97;
+    --shadow-float: 0 12px 32px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+  }
+}

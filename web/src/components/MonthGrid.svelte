@@ -21,6 +21,7 @@
 
   const MAX = 3;
   const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  const WEEKDAYS_LONG = ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'];
   const WEEKDAY_NAMES = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
   const eventsLabel = (n: number) =>
     n === 0 ? 'sin eventos' : n === 1 ? '1 evento' : `${n} eventos`;
@@ -29,61 +30,77 @@
 
 <div class="grid" role="group" aria-label="Mes">
   {#each WEEKDAYS as w, i (w)}
-    <div class="wd" aria-hidden="true" title={WEEKDAY_NAMES[i]}>{w}</div>
+    <div class="wd" aria-hidden="true" title={WEEKDAY_NAMES[i]}>
+      <span class="w-s">{w}</span><span class="w-l">{WEEKDAYS_LONG[i]}</span>
+    </div>
   {/each}
-  {#each days as day (day)}
+  {#each days as day, i (day)}
     {@const evs = byDay.get(day) ?? []}
-    <div class="cell" class:other={!day.startsWith(month)} class:today={day === today}>
+    <div
+      class="cell"
+      class:other={!day.startsWith(month)}
+      class:weekend={i % 7 > 4}
+      class:today={day === today}
+    >
       <button
         type="button"
         class="pick"
         aria-label={`${formatDayLong(day)}, ${eventsLabel(evs.length)}`}
         onclick={() => onPickDay(day)}
       >
-        <span class="num">{Number(day.slice(8))}</span>
+        <span class="num" class:mark={day === today}>{Number(day.slice(8))}</span>
       </button>
       <span class="evs">
         {#each evs.slice(0, MAX) as ev (ev.calendarId + ev.id)}
           <EventChip event={ev} {day} compact />
         {/each}
-        {#if evs.length > MAX}<span class="more">+{evs.length - MAX}</span>{/if}
+        {#if evs.length > MAX}<span class="more num">+{evs.length - MAX}</span>{/if}
       </span>
     </div>
   {/each}
 </div>
 
 <style>
+  /* Las lineas son el hueco de 1px sobre el fondo --line */
   .grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
-    border-top: 1px solid #e0e0e0;
-    border-left: 1px solid #e0e0e0;
+    gap: 1px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-m);
+    background: var(--line);
+    overflow: hidden;
   }
   .wd {
-    padding: 0.3rem;
+    padding: var(--sp-2) 0;
     text-align: center;
-    font-size: 0.8rem;
+    font-size: var(--fs-s);
     font-weight: 600;
-    color: #666;
-    border-right: 1px solid #e0e0e0;
-    border-bottom: 1px solid #e0e0e0;
-    background: #fafafa;
+    color: var(--ink-2);
+    background: var(--surface);
+  }
+  .w-l {
+    display: none;
   }
   .cell {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
-    gap: 0.2rem;
-    min-height: 5.5rem;
-    padding: 0.2rem;
-    position: relative;
-    border-right: 1px solid #e0e0e0;
-    border-bottom: 1px solid #e0e0e0;
-    background: #fff;
-    text-align: left;
-    font: inherit;
-    color: inherit;
+    align-items: center;
+    gap: var(--sp-1);
     min-width: 0;
+    min-height: 3.75rem;
+    padding: var(--sp-1);
+    position: relative;
+    background: var(--surface);
+  }
+  .cell.weekend {
+    background: var(--surface-2);
+  }
+  .cell.other {
+    background: var(--bg);
+  }
+  .cell.other .num {
+    color: var(--ink-2);
   }
   /* El boton cubre toda la celda; los enlaces de evento quedan por encima */
   .pick {
@@ -92,49 +109,60 @@
     background: none;
     font: inherit;
     color: inherit;
-    text-align: left;
   }
   .pick::after {
     content: '';
     position: absolute;
     inset: 0;
   }
-  .cell.other {
-    background: #f7f7f7;
-    color: #999;
+  .pick:focus-visible {
+    outline: none;
+  }
+  .pick:focus-visible::after {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
   .num {
-    font-size: 0.85rem;
-    width: 1.6rem;
-    height: 1.6rem;
-    line-height: 1.6rem;
+    display: inline-block;
+    min-width: 1.6rem;
     text-align: center;
-    border-radius: 50%;
-  }
-  .today .num {
-    background: #1a73e8;
-    color: #fff;
+    font-size: var(--fs-s);
+    font-weight: 600;
+    line-height: 1.6rem;
   }
   .evs {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 3px;
     min-width: 0;
   }
   .more {
-    font-size: 0.7rem;
-    color: #666;
+    color: var(--ink-2);
+    font-size: var(--fs-xs);
+    font-weight: 600;
   }
-  @media (max-width: 699px) {
+
+  @media (min-width: 700px) {
+    .w-s {
+      display: none;
+    }
+    .w-l {
+      display: inline;
+    }
     .cell {
-      min-height: 3.6rem;
-      align-items: center;
+      align-items: stretch;
+      min-height: 7.5rem;
+      padding: var(--sp-2);
+    }
+    .pick {
+      align-self: flex-start;
     }
     .evs {
-      flex-direction: row;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 3px;
+      flex-direction: column;
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      gap: 2px;
     }
   }
 </style>

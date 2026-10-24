@@ -62,7 +62,7 @@
 </script>
 
 <div class="login-container">
-  <h1>Organizador</h1>
+  <h1><span class="mark">Organizador</span></h1>
   <form onsubmit={handleSubmit} autocomplete="off">
     <label for="token">Token de acceso</label>
     <input
@@ -75,7 +75,7 @@
       bind:value={tokenInput}
       aria-describedby={error ? 'login-error' : undefined}
     />
-    <button type="submit" disabled={loading}>{loading ? 'Comprobando...' : 'Entrar'}</button>
+    <button type="submit" class="btn btn-primary" disabled={loading}>{loading ? 'Comprobando...' : 'Entrar'}</button>
     {#if error}
       <p id="login-error" class="error" role="alert">{error}</p>
     {/if}
@@ -88,46 +88,30 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    gap: 1rem;
-    padding: 2rem;
+    min-height: 100dvh;
+    gap: var(--sp-5);
+    padding: var(--sp-5) var(--sp-4);
   }
 
   h1 {
-    margin: 0;
-    font-size: 2rem;
+    font-size: var(--fs-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
   }
 
   form {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: var(--sp-3);
     width: 100%;
-    max-width: 360px;
-  }
-
-  input {
-    padding: 0.6rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 1rem;
-  }
-
-  button {
-    padding: 0.75rem 1.5rem;
-    background-color: #4285f4;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 1rem;
-  }
-
-  button:disabled {
-    opacity: 0.6;
+    max-width: 22rem;
+    padding: var(--sp-5);
+    border-radius: var(--r-m);
+    background: var(--surface);
   }
 
   .error {
-    margin: 0;
-    color: #b00020;
+    color: var(--danger);
+    font-size: var(--fs-s);
   }
 </style>

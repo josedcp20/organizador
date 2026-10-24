@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { isExpired, type NoteInfo } from '@organizador/shared';
   import Banner from '../components/Banner.svelte';
+  import PageHeader from '../components/PageHeader.svelte';
   import NoteForm, { type NoteFormValues } from '../components/NoteForm.svelte';
   import NoteItem from '../components/NoteItem.svelte';
   import { ApiError } from '../lib/api';
@@ -16,8 +17,6 @@
     sortNotes,
     toExpiryInput,
   } from '../lib/notes';
-
-  let title = 'Notas';
 
   let notes = $state<NoteInfo[]>([]);
   let loading = $state(true);
@@ -191,141 +190,127 @@
   });
 </script>
 
-<div class="container">
-  <div class="head">
-    <h1>{title}</h1>
-    <div class="head-actions">
-      <button type="button" disabled={loading || busy} onclick={() => load()}>
-        {loading ? 'Actualizando...' : 'Actualizar'}
-      </button>
-      <button type="button" disabled={creating} onclick={startCreate}>Nueva nota</button>
-    </div>
-  </div>
-
-  {#if offline}
-    <Banner kind="warning">
-      Sin conexión, datos guardados{savedAt
-        ? ` (${new Date(savedAt).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })})`
-        : ''}.
-    </Banner>
-  {/if}
-  {#if error}<Banner kind="error">{error}</Banner>{/if}
-  {#if actionError}<Banner kind="error">{actionError}</Banner>{/if}
-
-  {#if creating}
-    <NoteForm {busy} error={formError} onsubmit={submitCreate} oncancel={() => (creating = false)} />
-  {/if}
-
-  <div class="tabs" role="group" aria-label="Tipo de nota">
-    <button
-      type="button"
-      class:on={filter === 'note'}
-      aria-pressed={filter === 'note'}
-      onclick={() => (filter = 'note')}>Notas ({noteCount})</button
+<PageHeader title="Notas">
+  {#snippet actions()}
+    <button type="button" class="btn btn-quiet" disabled={loading || busy} onclick={() => load()}>
+      {loading ? 'Actualizando...' : 'Actualizar'}
+    </button>
+    <button type="button" class="btn btn-primary" disabled={creating} onclick={startCreate}
+      >Nueva nota</button
     >
-    <button
-      type="button"
-      class:on={filter === 'quick'}
-      aria-pressed={filter === 'quick'}
-      onclick={() => (filter = 'quick')}>Rápidas ({quickCount})</button
-    >
-  </div>
+  {/snippet}
+</PageHeader>
 
-  {#if loading && notes.length === 0}
-    <p role="status">Cargando...</p>
-  {:else if !error && visible.length === 0}
-    <p class="muted">
-      {filter === 'note' ? 'No hay notas todavía.' : 'No hay notas rápidas vigentes.'}
-    </p>
-  {/if}
+{#if offline}
+  <Banner kind="warning">
+    Sin conexión, datos guardados{savedAt
+      ? ` (${new Date(savedAt).toLocaleString('es-ES', { timeZone: 'Europe/Madrid' })})`
+      : ''}.
+  </Banner>
+{/if}
+{#if error}<Banner kind="error">{error}</Banner>{/if}
+{#if actionError}<Banner kind="error">{actionError}</Banner>{/if}
 
-  <ul class="list">
-    {#each visible as n (n.id)}
-      {#if editingId === n.id}
-        <li class="editing">
-          <NoteForm
-            note={n}
-            {busy}
-            error={formError}
-            onsubmit={(v) => submitEdit(n.id, v)}
-            oncancel={() => (editingId = null)}
-          />
-        </li>
-      {:else}
-        <NoteItem
-          note={n}
-          {busy}
-          onedit={() => startEdit(n.id)}
-          onpin={() => togglePin(n)}
-          ondelete={() => remove(n)}
-        />
-      {/if}
-    {/each}
-  </ul>
+{#if creating}
+  <NoteForm {busy} error={formError} onsubmit={submitCreate} oncancel={() => (creating = false)} />
+{/if}
+
+<div class="seg" role="group" aria-label="Tipo de nota">
+  <button
+    type="button"
+    class:on={filter === 'note'}
+    aria-pressed={filter === 'note'}
+    onclick={() => (filter = 'note')}>Notas ({noteCount})</button
+  >
+  <button
+    type="button"
+    class:on={filter === 'quick'}
+    aria-pressed={filter === 'quick'}
+    onclick={() => (filter = 'quick')}>Rápidas ({quickCount})</button
+  >
 </div>
 
+{#if loading && notes.length === 0}
+  <p role="status" class="muted">Cargando...</p>
+{:else if !error && visible.length === 0}
+  <p class="muted empty">
+    {filter === 'note' ? 'No hay notas todavía.' : 'No hay notas rápidas vigentes.'}
+  </p>
+{/if}
+
+<ul class="list notes">
+  {#each visible as n (n.id)}
+    {#if editingId === n.id}
+      <li class="editing">
+        <NoteForm
+          note={n}
+          {busy}
+          error={formError}
+          onsubmit={(v) => submitEdit(n.id, v)}
+          oncancel={() => (editingId = null)}
+        />
+      </li>
+    {:else}
+      <NoteItem
+        note={n}
+        {busy}
+        onedit={() => startEdit(n.id)}
+        onpin={() => togglePin(n)}
+        ondelete={() => remove(n)}
+      />
+    {/if}
+  {/each}
+</ul>
+
 <style>
-  .container {
-    padding: 1rem;
+  .seg {
+    display: inline-flex;
+    gap: 2px;
+    margin-bottom: var(--sp-4);
+    padding: 2px;
+    border-radius: var(--r-m);
+    background: var(--line);
   }
 
-  .head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
+  .seg button {
+    min-height: var(--tap);
+    padding: 0 var(--sp-4);
+    border: 0;
+    border-radius: calc(var(--r-m) - 2px);
+    background: transparent;
+    color: var(--ink-2);
+    font-weight: 600;
   }
 
-  .head-actions {
-    display: flex;
-    gap: 0.5rem;
+  .seg button.on {
+    background: var(--surface);
+    color: var(--ink);
   }
 
-  h1 {
-    margin: 0 0 1rem 0;
-  }
-
-  .muted {
-    color: #666;
-  }
-
-  .list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
+  .empty {
+    padding: var(--sp-4);
+    border-radius: var(--r-m);
+    background: var(--surface);
   }
 
   .editing {
-    list-style: none;
+    padding: var(--sp-3);
   }
 
-  .tabs {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-  }
+  /* Escritorio: rejilla de notas en vez de una columna estirada */
+  @media (min-width: 1024px) {
+    .notes {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+      gap: var(--sp-3);
+      background: transparent;
+      overflow: visible;
+    }
 
-  button {
-    padding: 0.5rem 1rem;
-    min-height: 44px;
-    background: #1a73e8;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-  }
-
-  button:disabled {
-    opacity: 0.6;
-  }
-
-  .tabs button {
-    background: #e0e0e0;
-    color: #333;
-  }
-
-  .tabs button.on {
-    background: #1a73e8;
-    color: #fff;
+    .notes > :global(li) {
+      border-top: 0 !important;
+      border-radius: var(--r-m);
+      background: var(--surface);
+    }
   }
 </style>

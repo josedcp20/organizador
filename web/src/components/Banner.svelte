@@ -12,25 +12,28 @@
 </div>
 
 <style>
+  /* Texto en --ink (AA garantizado); el estado lo da la barra y el tinte. */
   .banner {
-    padding: 0.5rem 0.75rem;
-    border-radius: 4px;
-    margin: 0 0 0.75rem 0;
-    border-left: 4px solid currentColor;
-  }
-
-  .info {
-    background: #e8f0fe;
-    color: #174ea6;
+    --tone: var(--accent);
+    margin: 0 0 var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    border-left: 4px solid var(--tone);
+    border-radius: var(--r-s);
+    background: color-mix(in srgb, var(--tone) 12%, var(--surface));
+    color: var(--ink);
+    font-size: var(--fs-s);
   }
 
   .warning {
-    background: #fef7e0;
-    color: #7a4b00;
+    --tone: var(--warn);
   }
 
   .error {
-    background: #fdecea;
-    color: #8a1c13;
+    --tone: var(--danger);
+  }
+
+  .banner :global(a) {
+    color: inherit;
+    font-weight: 600;
   }
 </style>
