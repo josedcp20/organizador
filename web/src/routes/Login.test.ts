@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { get } from 'svelte/store';
+import * as passkeys from '../lib/passkeys';
 import Login from './Login.svelte';
 import App from '../App.svelte';
 import { getToken, clearToken, setToken, meInfo } from '../lib/auth';
@@ -100,6 +101,108 @@ describe('Login', () => {
     expect(window.location.href).not.toContain('BAD');
     expect(getToken()).toBeNull();
     expect((screen.getByLabelText('Token de acceso') as HTMLInputElement).value).toBe('');
+  });
+});
+
+describe('Login con Face ID', () => {
+  const opts = { challenge: 'abc' };
+  const assertion = { id: 'i', rawId: 'i', response: {}, type: 'public-key' };
+  let getSpy: ReturnType<typeof vi.spyOn>;
+
+  function mockPasskeys(available = true) {
+    vi.spyOn(passkeys, 'passkeySupported').mockReturnValue(available);
+    vi.spyOn(passkeys, 'platformAvailable').mockResolvedValue(available);
+    getSpy = vi.spyOn(passkeys, 'authenticatePasskey').mockResolvedValue(assertion as never);
+  }
+  const faceBtn = () => screen.findByRole('button', { name: 'Entrar con Face ID' });
+  const apiErr = (status: number, retry?: string) =>
+    json(
+      { error: { code: 'x', message: 'x' } },
+      { status, headers: retry ? { 'Retry-After': retry } : {} },
+    );
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sin soporte: no hay boton ni peticion de opciones', async () => {
+    mockPasskeys(false);
+    render(Login);
+    await Promise.resolve();
+    expect(screen.queryByRole('button', { name: 'Entrar con Face ID' })).toBeNull();
+    expect(screen.getByLabelText('Token de acceso')).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('exito: opciones precargadas, sesion guardada y entra a #/hoy', async () => {
+    mockPasskeys();
+    fetchMock
+      .mockResolvedValueOnce(json(opts))
+      .mockResolvedValueOnce(json({ token: 's1.abc', expiresAt: 'x' }))
+      .mockResolvedValueOnce(
+        json({ ok: true, version: '1', tz: 'UTC', auth: 'session', sessionExpiresAt: 'x' }),
+      );
+    render(Login);
+    await fireEvent.click(await faceBtn());
+    expect(getSpy).toHaveBeenCalledWith(opts);
+    await waitFor(() => expect(getToken()).toBe('s1.abc'));
+    await waitFor(() => expect(window.location.hash).toBe('#/hoy'));
+    expect(get(meInfo)).toEqual({
+      version: '1',
+      tz: 'UTC',
+      auth: 'session',
+      sessionExpiresAt: 'x',
+    });
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/passkeys/login/options');
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined();
+  });
+
+  it('cancelado: mensaje tranquilo (status), no alert', async () => {
+    mockPasskeys();
+    getSpy.mockRejectedValue(new passkeys.PasskeyError('cancelled'));
+    fetchMock.mockResolvedValue(json(opts));
+    render(Login);
+    await fireEvent.click(await faceBtn());
+    expect((await screen.findByRole('status')).textContent).toMatch(/cancelado/);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(getToken()).toBeNull();
+  });
+
+  it('401: passkey no reconocida', async () => {
+    mockPasskeys();
+    fetchMock.mockResolvedValueOnce(json(opts)).mockResolvedValueOnce(apiErr(401));
+    render(Login);
+    await fireEvent.click(await faceBtn());
+    expect((await screen.findByRole('alert')).textContent).toMatch(/no reconocida/);
+    expect(getToken()).toBeNull();
+  });
+
+  it('429: bloqueo temporal', async () => {
+    mockPasskeys();
+    fetchMock.mockResolvedValueOnce(json(opts)).mockResolvedValueOnce(apiErr(429, '600'));
+    render(Login);
+    await fireEvent.click(await faceBtn());
+    expect((await screen.findByRole('alert')).textContent).toMatch(/bloqueado.*10 min/);
+  });
+
+  it('sin conexion al iniciar sesion', async () => {
+    mockPasskeys();
+    fetchMock.mockResolvedValueOnce(json(opts)).mockRejectedValueOnce(new TypeError('down'));
+    render(Login);
+    await fireEvent.click(await faceBtn());
+    expect((await screen.findByRole('alert')).textContent).toMatch(/conexión/);
+  });
+
+  it('opciones caducadas: refresca y pide pulsar de nuevo sin llamar a get', async () => {
+    mockPasskeys();
+    fetchMock.mockResolvedValue(json(opts));
+    const now = vi.spyOn(Date, 'now');
+    render(Login);
+    const btn = await faceBtn();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    now.mockReturnValue(Date.now() + 5 * 60 * 1000);
+    await fireEvent.click(btn);
+    expect((await screen.findByRole('status')).textContent).toMatch(/pulsar|pulsa/);
+    expect(getSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 });
 

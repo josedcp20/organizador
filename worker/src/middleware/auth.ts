@@ -9,7 +9,14 @@ export const WINDOW_MS = 15 * 60 * 1000;
 export const BLOCK_MS = 15 * 60 * 1000;
 
 /** Rutas bajo /api/* que no exigen token. (/oauth/* no cuelga de /api, asi que ya es publico.) */
-const PUBLIC_API_PATHS = new Set(['/api/health']);
+// Las rutas de login con passkey aplican ellas mismas el bloqueo por IP (clientGate).
+// Con metodo: un path solo no basta (DELETE /api/passkeys/login casaria con /api/passkeys/:id).
+const PUBLIC_API_ROUTES = new Set([
+  'GET /api/health',
+  'HEAD /api/health',
+  'POST /api/passkeys/login/options',
+  'POST /api/passkeys/login',
+]);
 
 const HASH_RE = /^[0-9a-f]{64}$/i;
 /** Separacion de dominio para derivar la clave HMAC de las IPs a partir de APP_TOKEN_SHA256. */
@@ -223,7 +230,7 @@ export async function resetFailures(db: D1Database, key: string, t: number): Pro
     .run();
 }
 
-function rateLimited(c: Context, untilIso: string, t: number): Response {
+export function rateLimited(c: Context, untilIso: string, t: number): Response {
   const retry = Math.max(1, Math.ceil((Date.parse(untilIso) - t) / 1000));
   c.header('Retry-After', String(retry));
   return c.json(errorBody('rate_limited', 'Too many failed attempts'), 429);
@@ -238,31 +245,14 @@ function misconfigured(c: Context, code: string): Response {
 // Los preflight OPTIONS los resuelve cors (montado antes) sin llegar aqui: cors es el unico
 // responsable de ellos y auth no los trata.
 export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
-  if (PUBLIC_API_PATHS.has(c.req.path)) {
+  if (PUBLIC_API_ROUTES.has(`${c.req.method} ${c.req.path}`)) {
     return next();
   }
 
-  // Fallo en cerrado y sin contar como intento: configuracion invalida.
-  const secret = c.env.APP_TOKEN_SHA256?.trim();
-  if (!secret || !HASH_RE.test(secret)) return misconfigured(c, 'bad_token_hash');
-
-  // Sin CF-Connecting-IP (no pasa por Cloudflare) no hay cliente identificable: fuera de dev es
-  // una anomalia (500, sin contar); en dev/tests se usa un bucket por defecto.
-  const rawIp = c.req.header('CF-Connecting-IP')?.trim();
-  if (!rawIp && c.env.ENV !== 'dev') return misconfigured(c, 'missing_client_ip');
-
-  const t = now();
-  const key = await ipKey(rawIp || 'unknown', secret);
+  const gate = await clientGate(c);
+  if (gate instanceof Response) return gate;
+  const { key, t, hasRow } = gate;
   const db = c.env.DB;
-
-  const row = await db
-    .prepare('SELECT blocked_until FROM auth_failures WHERE ip = ?1')
-    .bind(key)
-    .first<{ blocked_until: string | null }>();
-
-  if (row?.blocked_until && Date.parse(row.blocked_until) > t) {
-    return rateLimited(c, row.blocked_until, t);
-  }
 
   const header = c.req.header('Authorization');
   const bearer = extractBearer(header);
@@ -276,23 +266,63 @@ export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
       await touchSession(db, sess, t);
     }
   } else {
-    ok = await verifyToken(header, secret);
+    // clientGate ya valido APP_TOKEN_SHA256.
+    ok = await verifyToken(header, (c.env.APP_TOKEN_SHA256 ?? '').trim());
     if (ok) c.set('authKind', 'static');
   }
 
   if (ok) {
-    if (row) {
+    if (hasRow) {
       await resetFailures(db, key, t);
     }
     return next();
   }
 
-  const res = await recordFailure(db, key, t);
+  return failure(c, key, t, errorBody('unauthorized', 'Unauthorized'));
+};
+
+/**
+ * Cliente identificado para el limite de fallos: clave en D1, instante y si ya tiene fila.
+ * Devuelve una Response (500 config invalida, 429 bloqueado) si no se debe continuar.
+ */
+export async function clientGate(
+  c: Context<AppEnv>,
+): Promise<{ key: string; t: number; hasRow: boolean } | Response> {
+  // Fallo en cerrado y sin contar como intento: configuracion invalida.
+  const secret = c.env.APP_TOKEN_SHA256?.trim();
+  if (!secret || !HASH_RE.test(secret)) return misconfigured(c, 'bad_token_hash');
+
+  // Sin CF-Connecting-IP (no pasa por Cloudflare) no hay cliente identificable: fuera de dev es
+  // una anomalia (500, sin contar); en dev/tests se usa un bucket por defecto.
+  const rawIp = c.req.header('CF-Connecting-IP')?.trim();
+  if (!rawIp && c.env.ENV !== 'dev') return misconfigured(c, 'missing_client_ip');
+
+  const t = now();
+  const key = await ipKey(rawIp || 'unknown', secret);
+
+  const row = await c.env.DB.prepare('SELECT blocked_until FROM auth_failures WHERE ip = ?1')
+    .bind(key)
+    .first<{ blocked_until: string | null }>();
+
+  if (row?.blocked_until && Date.parse(row.blocked_until) > t) {
+    return rateLimited(c, row.blocked_until, t);
+  }
+  return { key, t, hasRow: row !== null };
+}
+
+/** Registra un fallo y responde 401 con `body` (o 429 si una rafaga ya supero el umbral). */
+export async function failure(
+  c: Context<AppEnv>,
+  key: string,
+  t: number,
+  body: ReturnType<typeof errorBody>,
+): Promise<Response> {
+  const res = await recordFailure(c.env.DB, key, t);
 
   // El fallo que alcanza el umbral (el 10o) da 401 y fija el bloqueo; los que lo superan (solo
   // posible en rafagas concurrentes) ya reciben 429.
   if (res && res.count > MAX_FAILURES && res.blocked_until) {
     return rateLimited(c, res.blocked_until, t);
   }
-  return c.json(errorBody('unauthorized', 'Unauthorized'), 401);
-};
+  return c.json(body, 401);
+}

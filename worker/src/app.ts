@@ -10,6 +10,8 @@ import { agendaWrite } from './routes/agendaWrite';
 import { me } from './routes/me';
 import { notes } from './routes/notes';
 import { oauth } from './routes/oauth';
+import { passkeyLogin } from './routes/passkeyLogin';
+import { passkeys } from './routes/passkeys';
 import { quickNotes } from './routes/quickNotes';
 import { session } from './routes/session';
 import { settings } from './routes/settings';
@@ -19,12 +21,14 @@ import { getVersion } from './version';
 export const app = new Hono<AppEnv>();
 
 app.use('*', cors);
-// Auth en todo /api/* (excepto /api/health, ver PUBLIC_API_PATHS). /oauth/* (start/callback de Google) queda fuera: se autoriza con ticket/state firmados.
+// Auth en todo /api/* (excepto /api/health, ver PUBLIC_API_ROUTES). /oauth/* (start/callback de Google) queda fuera: se autoriza con ticket/state firmados.
 app.use('/api/*', auth);
 
 app.get('/api/health', (c) => c.json({ ok: true, version: getVersion(c.env) }));
 app.route('/', me);
 app.route('/', session);
+app.route('/', passkeyLogin);
+app.route('/', passkeys);
 app.route('/', oauth);
 app.route('/', calendars);
 app.route('/', agenda);

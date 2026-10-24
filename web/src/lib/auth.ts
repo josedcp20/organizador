@@ -43,6 +43,8 @@ function clearCachedData(): void {
 export interface MeInfo {
   version: string;
   tz: string;
+  auth?: 'static' | 'session';
+  sessionExpiresAt?: string;
 }
 
 function readToken(): string | null {

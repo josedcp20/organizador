@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { describe, expect, it, beforeEach } from 'vitest';
+import { setClock } from '../src/clock';
 import type { Env } from '../src/env';
 import { importStateKey } from '../src/crypto/signedToken';
 import { toBase64Url } from '../src/crypto/encoding';
@@ -23,6 +24,17 @@ describe('WebAuthn challenges', () => {
   });
 
   describe('issueChallenge', () => {
+    it('usa el reloj inyectable al emitir', async () => {
+      setClock(() => 1_000_000);
+      try {
+        const challenge = await issueChallenge(key, 'webauthn_reg');
+        const result = await checkChallenge(key, 'webauthn_reg', challenge, 1_000_000);
+        expect(result).toMatchObject({ ok: true, exp: 1_000_000 + 5 * 60 * 1000 });
+      } finally {
+        setClock();
+      }
+    });
+
     it('retorna una cadena base64url', async () => {
       const challenge = await issueChallenge(key, 'webauthn_reg');
       expect(typeof challenge).toBe('string');

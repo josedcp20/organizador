@@ -3,7 +3,24 @@
   import { CALENDAR_PALETTE, isHexColor } from '@organizador/shared';
   import type { AppSettings, AppSettingsPatch, CalendarInfo, GoogleStatus } from '@organizador/shared';
   import { fetchSettings, patchSettings } from '../lib/settings';
-  import { session, meInfo } from '../lib/auth';
+  import { session, meInfo, isSessionToken, setToken } from '../lib/auth';
+  import type { PasskeyInfo } from '@organizador/shared';
+  import {
+    PasskeyError,
+    authenticatePasskey,
+    fetchLoginOptions,
+    fetchRegisterOptions,
+    listPasskeys,
+    loginWithPasskey,
+    passkeySupported,
+    platformAvailable,
+    registerPasskey,
+    revokeAllSessions,
+    revokePasskey,
+    submitRegistration,
+    type LoginOptionsJSON,
+    type RegisterOptionsJSON,
+  } from '../lib/passkeys';
   import { ApiError, logout } from '../lib/api';
   import Banner from '../components/Banner.svelte';
   import PageHeader from '../components/PageHeader.svelte';
@@ -248,6 +265,147 @@
     }
   }
 
+  // --- Face ID (passkeys) ---
+  let sessionAuth = $state(isSessionToken());
+  let pkAvailable = $state(false);
+  let pkList = $state<PasskeyInfo[]>([]);
+  let pkLabel = $state('');
+  let pkBusy = $state(false);
+  let pkNotice = $state('');
+  let pkError = $state('');
+  /** Opciones pedidas de antemano: iOS exige llamar a WebAuthn dentro del gesto, sin awaits antes. */
+  let pkOptions: RegisterOptionsJSON | null = null;
+  /** Tras activar: ofrecer cambiar el token estatico de este dispositivo por una sesion (D-FID2). */
+  let canSwitch = $state(false);
+  let switchConfirm = $state(false);
+  let loginOptions: LoginOptionsJSON | null = null;
+
+  const pkErrorMessage = (e: unknown) =>
+    e instanceof PasskeyError ? e.message : `No se pudo completar la operación. ${apiErrorMessage(e)}`;
+
+  const fmtDate = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }) : 'nunca';
+
+  async function prefetchOptions() {
+    try {
+      pkOptions = await fetchRegisterOptions();
+    } catch (e) {
+      pkOptions = null;
+      pkError = pkErrorMessage(e);
+    }
+  }
+
+  async function loadPasskeys() {
+    try {
+      pkList = await listPasskeys();
+    } catch (e) {
+      pkError = pkErrorMessage(e);
+    }
+  }
+
+  function activateFaceId() {
+    const opts = pkOptions;
+    if (!opts) {
+      pkError = 'Las opciones de registro no están listas. Inténtalo de nuevo.';
+      void prefetchOptions();
+      return;
+    }
+    pkOptions = null; // el reto es de un solo uso
+    pkBusy = true;
+    pkNotice = '';
+    pkError = '';
+    // Llamada directa en el gesto (sin await previo).
+    void registerPasskey(opts)
+      .then((resp) => submitRegistration(resp, pkLabel.trim() || 'iPhone'))
+      .then(async () => {
+        pkLabel = '';
+        pkNotice =
+          'Face ID activado. Este dispositivo sigue usando el token hasta que elijas usar Face ID en él.';
+        canSwitch = true;
+        void prefetchLoginOptions();
+        await loadPasskeys();
+      })
+      .catch((e) => {
+        // Cancelar el dialogo del sistema no es un error.
+        if (!(e instanceof PasskeyError && e.code === 'cancelled')) pkError = pkErrorMessage(e);
+      })
+      .finally(() => {
+        pkBusy = false;
+        void prefetchOptions();
+      });
+  }
+
+  async function prefetchLoginOptions() {
+    try {
+      loginOptions = await fetchLoginOptions();
+    } catch (e) {
+      loginOptions = null;
+      pkError = pkErrorMessage(e);
+    }
+  }
+
+  /** Confirmado: entra con la passkey y, solo si funciona, sustituye el token por la sesion. */
+  function switchToFaceId() {
+    const opts = loginOptions;
+    switchConfirm = false;
+    if (!opts) {
+      pkError = 'Face ID no está listo. Inténtalo de nuevo.';
+      void prefetchLoginOptions();
+      return;
+    }
+    loginOptions = null; // el reto es de un solo uso
+    pkBusy = true;
+    pkNotice = '';
+    pkError = '';
+    // Llamada directa en el gesto (sin await previo).
+    void authenticatePasskey(opts)
+      .then(loginWithPasskey)
+      .then(({ token, expiresAt }) => {
+        setToken(token);
+        meInfo.update((m) => (m ? { ...m, auth: 'session', sessionExpiresAt: expiresAt } : m));
+        sessionAuth = true;
+        canSwitch = false;
+        pkNotice = 'Este dispositivo usa ahora Face ID; el token ya no está guardado aquí.';
+      })
+      .catch((e) => {
+        if (!(e instanceof PasskeyError && e.code === 'cancelled')) pkError = pkErrorMessage(e);
+        void prefetchLoginOptions();
+      })
+      .finally(() => {
+        pkBusy = false;
+      });
+  }
+
+  async function removePasskey(p: PasskeyInfo) {
+    if (!window.confirm(`¿Quitar Face ID de "${p.label}"? Se cerrarán sus sesiones.`)) return;
+    pkBusy = true;
+    pkNotice = '';
+    pkError = '';
+    try {
+      await revokePasskey(p.id);
+      pkList = pkList.filter((x) => x.id !== p.id);
+    } catch (e) {
+      pkError = pkErrorMessage(e);
+    } finally {
+      pkBusy = false;
+    }
+  }
+
+  async function closeAllSessions() {
+    if (!window.confirm('¿Cerrar sesión en todos los dispositivos con Face ID?')) return;
+    pkBusy = true;
+    pkNotice = '';
+    pkError = '';
+    try {
+      await revokeAllSessions();
+      pkNotice = 'Sesiones de Face ID cerradas en todos los dispositivos.';
+    } catch (e) {
+      pkError = pkErrorMessage(e);
+    } finally {
+      pkBusy = false;
+    }
+  }
+
   onMount(() => {
     return () => clearInterval(cooldownTimer);
   });
@@ -270,6 +428,15 @@
       notice = { kind: 'error', text: connectErrorMessage(result.reason) };
     }
     void loadStatus();
+  });
+
+  onMount(() => {
+    if (passkeySupported()) void loadPasskeys();
+    if (sessionAuth) return;
+    void platformAvailable().then((ok) => {
+      pkAvailable = ok;
+      if (ok) void prefetchOptions();
+    });
   });
 </script>
 
@@ -528,6 +695,78 @@
     {/if}
   </section>
   {/if}
+
+  <section class="group" aria-labelledby="faceid-title" aria-busy={pkBusy}>
+    <h2 id="faceid-title">Face ID</h2>
+    {#if pkNotice}
+      <Banner kind="info">{pkNotice}</Banner>
+    {/if}
+    {#if pkError}
+      <Banner kind="error">{pkError}</Banner>
+    {/if}
+    {#if sessionAuth}
+      <p class="help top">
+        Has entrado con Face ID. Para activar Face ID en otro dispositivo, entra allí con el token
+        manual: el registro de passkeys requiere el token.
+        {#if $meInfo?.sessionExpiresAt}La sesión caduca el {fmtDate($meInfo.sessionExpiresAt)}.{/if}
+      </p>
+    {:else if canSwitch}
+      {#if switchConfirm}
+        <p class="help top">
+          El token se borrará de este dispositivo y entrarás con Face ID. Guarda el token en otro
+          sitio: lo necesitarás para otros dispositivos y para activar Face ID de nuevo.
+        </p>
+        <div class="fields">
+          <button type="button" class="btn btn-primary" disabled={pkBusy} onclick={switchToFaceId}>
+            Sí, usar Face ID y olvidar el token
+          </button>
+          <button type="button" class="btn btn-quiet" disabled={pkBusy} onclick={() => (switchConfirm = false)}>
+            Cancelar
+          </button>
+        </div>
+      {:else}
+        <button type="button" class="btn btn-primary" disabled={pkBusy} onclick={() => (switchConfirm = true)}>
+          Usar Face ID en este dispositivo y olvidar el token
+        </button>
+      {/if}
+    {:else if pkAvailable}
+      <div class="fields">
+        <label class="field">
+          <span>Nombre del dispositivo (opcional)</span>
+          <input type="text" bind:value={pkLabel} placeholder="iPhone" maxlength="40" />
+        </label>
+        <button type="button" class="btn btn-primary" disabled={pkBusy} onclick={activateFaceId}>
+          {pkBusy ? 'Activando...' : 'Activar Face ID'}
+        </button>
+      </div>
+    {:else}
+      <p class="muted">Este dispositivo no admite Face ID.</p>
+    {/if}
+    {#if pkList.length > 0}
+      <ul class="list pk-list" aria-label="Passkeys registradas">
+        {#each pkList as p (p.id)}
+          <li class="row">
+            <div class="grow">
+              <p><strong>{p.label}</strong></p>
+              <p class="muted small">
+                Creada: {fmtDate(p.createdAt)} · Último uso: {fmtDate(p.lastUsedAt)}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-quiet danger"
+              disabled={pkBusy}
+              aria-label={`Quitar ${p.label}`}
+              onclick={() => removePasskey(p)}>Quitar</button
+            >
+          </li>
+        {/each}
+      </ul>
+      <button type="button" class="btn btn-quiet danger" disabled={pkBusy} onclick={closeAllSessions}>
+        Cerrar sesión en todos los dispositivos
+      </button>
+    {/if}
+  </section>
 
   <section class="group" aria-labelledby="more-title">
     <h2 id="more-title">Más ajustes</h2>

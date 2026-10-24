@@ -1,5 +1,6 @@
 import type { TokenPurpose } from '../crypto/signedToken';
 import { signToken, verifyToken, newNonce } from '../crypto/signedToken';
+import { now } from '../clock';
 import { toBase64Url, fromBase64Url } from '../crypto/encoding';
 
 /**
@@ -12,7 +13,7 @@ export async function issueChallenge(
   purpose: 'webauthn_reg' | 'webauthn_login',
 ): Promise<string> {
   const nonce = newNonce();
-  const nowMs = Date.now();
+  const nowMs = now();
   const ttlMs = 5 * 60 * 1000; // 5 min
   const expMs = nowMs + ttlMs;
   const token = await signToken(key, purpose as TokenPurpose, nonce, expMs);

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import Ajustes from './Ajustes.svelte';
 import { clearToken, setToken } from '../lib/auth';
+import * as passkeys from '../lib/passkeys';
 import { nav } from '../lib/google';
 
 type Init = NonNullable<Parameters<typeof fetch>[1]>;
@@ -59,9 +60,15 @@ function urlOf(call: unknown[]): string {
   return String(call[0]);
 }
 
+const calls = (method: string, suffix: string) =>
+  fetchMock.mock.calls.filter(
+    (c) => ((c[1] as Init | undefined)?.method ?? 'GET') === method && urlOf(c).endsWith(suffix),
+  );
+
 beforeEach(() => {
   routes = {
     'GET /api/settings': () => json({ app_events_color: null, default_write_calendar: null }),
+    'GET /api/passkeys': () => json({ passkeys: [] }),
     'GET /api/google/status': () => json(disconnected()),
     'GET /api/calendars': () => json({ calendars: [CAL_A] }),
     'POST /api/calendars/refresh': () => json({ calendars: [CAL_A] }),
@@ -309,11 +316,6 @@ describe('Ajustes: seccion Google', () => {
 });
 
 describe('Ajustes: seccion Calendarios', () => {
-  const calls = (method: string, suffix: string) =>
-    fetchMock.mock.calls.filter(
-      (c) => ((c[1] as Init | undefined)?.method ?? 'GET') === method && urlOf(c).endsWith(suffix),
-    );
-
   beforeEach(() => {
     routes['GET /api/google/status'] = () => json(connected);
   });
@@ -462,5 +464,152 @@ describe('Ajustes: seccion Calendarios', () => {
     expect(await screen.findByText(/Conecta Google para ver y configurar/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Actualizar desde Google' })).toBeNull();
     expect(calls('GET', '/api/calendars')).toHaveLength(0);
+  });
+});
+
+describe('Ajustes: seccion Face ID', () => {
+  const PK = {
+    id: 'cred1',
+    label: 'iPhone',
+    createdAt: '2026-10-20T08:00:00.000Z',
+    lastUsedAt: null,
+    backedUp: true,
+  };
+  const OPTS = { challenge: 'c' };
+
+  beforeEach(() => {
+    vi.spyOn(passkeys, 'passkeySupported').mockReturnValue(true);
+    vi.spyOn(passkeys, 'platformAvailable').mockResolvedValue(true);
+    routes['POST /api/passkeys/register/options'] = () => json(OPTS);
+  });
+
+  it('con token de sesion explica y no ofrece Activar', async () => {
+    setToken('s1.abc');
+    render(Ajustes);
+    expect(await screen.findByText(/requiere el token/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Activar Face ID' })).toBeNull();
+  });
+
+  it('sin autenticador de plataforma no ofrece Activar', async () => {
+    vi.spyOn(passkeys, 'platformAvailable').mockResolvedValue(false);
+    render(Ajustes);
+    expect(await screen.findByText(/no admite Face ID/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Activar Face ID' })).toBeNull();
+  });
+
+  it('activar: registra con nombre y anade la fila', async () => {
+    const reg = vi.spyOn(passkeys, 'registerPasskey').mockResolvedValue({ id: 'x' } as never);
+    routes['POST /api/passkeys/register'] = () => json(PK);
+    render(Ajustes);
+    const btn = await screen.findByRole('button', { name: 'Activar Face ID' });
+    await waitFor(() => expect(calls('POST', '/api/passkeys/register/options')).toHaveLength(1));
+    routes['GET /api/passkeys'] = () => json({ passkeys: [PK] });
+    await fireEvent.input(screen.getByLabelText(/Nombre del dispositivo/), {
+      target: { value: 'Mi iPhone' },
+    });
+    await fireEvent.click(btn);
+    expect(await screen.findByText(/Face ID activado/)).toBeTruthy();
+    expect(reg).toHaveBeenCalledWith(OPTS);
+    const [, init] = calls('POST', '/api/passkeys/register')[0] as [string, Init];
+    expect(JSON.parse(String(init.body)).label).toBe('Mi iPhone');
+    expect(await screen.findByRole('button', { name: 'Quitar iPhone' })).toBeTruthy();
+  });
+
+  async function activate() {
+    vi.spyOn(passkeys, 'registerPasskey').mockResolvedValue({ id: 'x' } as never);
+    routes['POST /api/passkeys/register'] = () => json(PK);
+    routes['POST /api/passkeys/login/options'] = () => json(OPTS);
+    render(Ajustes);
+    const btn = await screen.findByRole('button', { name: 'Activar Face ID' });
+    await waitFor(() => expect(calls('POST', '/api/passkeys/register/options')).toHaveLength(1));
+    await fireEvent.click(btn);
+    const sw = await screen.findByRole('button', {
+      name: 'Usar Face ID en este dispositivo y olvidar el token',
+    });
+    // Opciones de login pedidas por adelantado (gesto de iOS).
+    await waitFor(() => expect(calls('POST', '/api/passkeys/login/options')).toHaveLength(1));
+    return sw;
+  }
+
+  it('tras activar: usar Face ID sustituye el token por la sesion (con confirmacion)', async () => {
+    setToken('static-token');
+    const sw = await activate();
+    const auth = vi.spyOn(passkeys, 'authenticatePasskey').mockResolvedValue({ id: 'x' } as never);
+    routes['POST /api/passkeys/login'] = () =>
+      json({ token: 's1.sess', expiresAt: '2026-11-23T10:00:00.000Z' });
+    await fireEvent.click(sw);
+    expect(auth).not.toHaveBeenCalled();
+    expect(localStorage.getItem('organizador_token')).toBe('static-token');
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Sí, usar Face ID y olvidar el token' }),
+    );
+    expect(await screen.findByText(/usa ahora Face ID/)).toBeTruthy();
+    expect(auth).toHaveBeenCalledWith(OPTS);
+    expect(localStorage.getItem('organizador_token')).toBe('s1.sess');
+    // El login es publico: sin Authorization.
+    const [, init] = calls('POST', '/api/passkeys/login')[0] as [string, Init];
+    expect(new Headers(init.headers).get('Authorization')).toBeNull();
+  });
+
+  it('si el login con Face ID falla, conserva el token estatico', async () => {
+    setToken('static-token');
+    const sw = await activate();
+    vi.spyOn(passkeys, 'authenticatePasskey').mockResolvedValue({ id: 'x' } as never);
+    routes['POST /api/passkeys/login'] = () =>
+      json({ error: { code: 'invalid_login', message: 'x' } }, 401);
+    await fireEvent.click(sw);
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'Sí, usar Face ID y olvidar el token' }),
+    );
+    await waitFor(() => expect(calls('POST', '/api/passkeys/login')).toHaveLength(1));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(localStorage.getItem('organizador_token')).toBe('static-token');
+    expect(
+      screen.getByRole('button', { name: 'Usar Face ID en este dispositivo y olvidar el token' }),
+    ).toBeTruthy();
+  });
+
+  it('cancelar la confirmacion no hace login', async () => {
+    setToken('static-token');
+    const sw = await activate();
+    const auth = vi.spyOn(passkeys, 'authenticatePasskey');
+    await fireEvent.click(sw);
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(auth).not.toHaveBeenCalled();
+    expect(localStorage.getItem('organizador_token')).toBe('static-token');
+  });
+
+  it('cancelar no es un error', async () => {
+    vi.spyOn(passkeys, 'registerPasskey').mockRejectedValue(new passkeys.PasskeyError('cancelled'));
+    render(Ajustes);
+    const btn = await screen.findByRole('button', { name: 'Activar Face ID' });
+    await waitFor(() => expect(calls('POST', '/api/passkeys/register/options')).toHaveLength(1));
+    await fireEvent.click(btn);
+    await waitFor(() => expect(btn.hasAttribute('disabled')).toBe(false));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('quitar pide confirmacion y retira la fila', async () => {
+    routes['GET /api/passkeys'] = () => json({ passkeys: [PK] });
+    routes['DELETE /api/passkeys/cred1'] = () => new Response(null, { status: 204 });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValue(true);
+    render(Ajustes);
+    const quitar = await screen.findByRole('button', { name: 'Quitar iPhone' });
+    await fireEvent.click(quitar);
+    expect(calls('DELETE', '/api/passkeys/cred1')).toHaveLength(0);
+    await fireEvent.click(quitar);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Quitar iPhone' })).toBeNull());
+    expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it('cerrar sesion en todos los dispositivos', async () => {
+    routes['GET /api/passkeys'] = () => json({ passkeys: [PK] });
+    routes['DELETE /api/sessions'] = () => new Response(null, { status: 204 });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(Ajustes);
+    await fireEvent.click(
+      await screen.findByRole('button', { name: 'Cerrar sesión en todos los dispositivos' }),
+    );
+    expect(await screen.findByText(/Sesiones de Face ID cerradas/)).toBeTruthy();
   });
 });
