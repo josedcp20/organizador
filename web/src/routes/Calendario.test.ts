@@ -80,6 +80,21 @@ afterEach(() => {
 });
 
 describe('Calendario', () => {
+  it('Nuevo evento enlaza con hoy por defecto', () => {
+    render(Calendario);
+    expect(screen.getByRole('link', { name: 'Nuevo evento' }).getAttribute('href')).toBe(
+      `#/nuevo-evento?fecha=${todayMadrid()}`,
+    );
+  });
+
+  it('Nuevo evento usa la fecha de la vista (anchor)', async () => {
+    render(Calendario);
+    await fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    const href = screen.getByRole('link', { name: 'Nuevo evento' }).getAttribute('href');
+    expect(href).toMatch(/^#\/nuevo-evento\?fecha=\d{4}-\d{2}-\d{2}$/);
+    expect(href).not.toBe(`#/nuevo-evento?fecha=${todayMadrid()}`);
+  });
+
   it('carga el rango con Bearer y pinta eventos en agenda; app con marca', async () => {
     render(Calendario);
     await fireEvent.click(screen.getByRole('tab', { name: 'Agenda' }));

@@ -31,7 +31,9 @@ const cal = (id: string, name: string, over: Record<string, unknown> = {}) => ({
 let routes: Record<string, () => Response>;
 
 beforeEach(() => {
-  routes = {};
+  routes = {
+    'GET /api/settings': () => json({ app_events_color: null, default_write_calendar: null }),
+  };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string, init?: { method?: string }) => {
@@ -73,6 +75,32 @@ describe('Hoy', () => {
     ],
     tomorrowEvents: [],
   };
+
+  it('Nuevo evento enlaza al formulario con la fecha de hoy', async () => {
+    routes['GET /api/today'] = () => json({ ...today, todayEvents: [] });
+    routes['GET /api/google/status'] = () => json(status(true));
+    routes['GET /api/calendars'] = () => json({ calendars: [] });
+    render(Hoy);
+    await screen.findByText('Nada hoy');
+    expect(screen.getByRole('link', { name: 'Nuevo evento' }).getAttribute('href')).toBe(
+      '#/nuevo-evento?fecha=2026-10-23',
+    );
+  });
+
+  it('Google desconectado: Nuevo evento no enlaza y explica por que', async () => {
+    routes['GET /api/today'] = () => json({ ...today, todayEvents: [] });
+    routes['GET /api/google/status'] = () => json(status(false));
+    routes['GET /api/calendars'] = () => json({ calendars: [] });
+    render(Hoy);
+    await screen.findByText('Nada hoy');
+    const link = screen.getByRole('link', { name: 'Nuevo evento' });
+    expect(link.getAttribute('href')).toBeNull();
+    expect(link.getAttribute('aria-disabled')).toBe('true');
+    expect(link.getAttribute('aria-describedby')).toBe('hoy-new-help');
+    expect(screen.getByText('Conecta Google en Ajustes para crear eventos').id).toBe(
+      'hoy-new-help',
+    );
+  });
 
   it('muestra eventos, vacio y banners', async () => {
     routes['GET /api/today'] = () => json(today);
@@ -189,5 +217,78 @@ describe('Ajustes: sync', () => {
     release(json({ status: 'ok', failed: 1, partial: 0 }));
     expect(await screen.findByText('Sincronización completada con errores.')).toBeTruthy();
     expect(sw.disabled).toBe(false);
+  });
+});
+
+describe('Ajustes: eventos', () => {
+  beforeEach(() => {
+    routes['GET /api/google/status'] = () => json(status(true));
+    routes['GET /api/calendars'] = () =>
+      json({
+        calendars: [
+          cal('a', 'Personal'),
+          cal('b', 'Compartido', { writable: false, accessRole: 'reader' }),
+          cal('c', 'Oculto', { visible: false }),
+        ],
+      });
+  });
+
+  it('el selector solo ofrece calendarios escribibles y visibles y guarda', async () => {
+    let body: unknown;
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    routes['PATCH /api/settings'] = () =>
+      json({ app_events_color: null, default_write_calendar: 'a' });
+    render(Ajustes);
+    const select = (await screen.findByLabelText(
+      'Calendario para nuevos eventos',
+    )) as HTMLSelectElement;
+    expect([...select.options].map((o) => o.text)).toEqual(['Sin preferencia', 'Personal']);
+    await fireEvent.change(select, { target: { value: 'a' } });
+    expect(await screen.findByText('Ajuste guardado.')).toBeTruthy();
+    const call = fetchMock.mock.calls.find((c) => c[1]?.method === 'PATCH')!;
+    body = JSON.parse(call[1].body);
+    expect(body).toEqual({ default_write_calendar: 'a' });
+  });
+
+  it('error al guardar: el select vuelve al valor anterior', async () => {
+    routes['PATCH /api/settings'] = () =>
+      json({ error: { code: 'validation', message: 'x' } }, 400);
+    render(Ajustes);
+    const select = (await screen.findByLabelText(
+      'Calendario para nuevos eventos',
+    )) as HTMLSelectElement;
+    await fireEvent.change(select, { target: { value: 'a' } });
+    await screen.findByText(/No se pudo guardar el ajuste/);
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText('Calendario para nuevos eventos') as HTMLSelectElement).value,
+      ).toBe(''),
+    );
+  });
+
+  it('Color del calendario guarda app_events_color null', async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    routes['GET /api/settings'] = () =>
+      json({ app_events_color: '#d93025', default_write_calendar: null });
+    routes['PATCH /api/settings'] = () =>
+      json({ app_events_color: null, default_write_calendar: null });
+    render(Ajustes);
+    const btn = await screen.findByRole('button', { name: 'Color del calendario' });
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    await fireEvent.click(btn);
+    await waitFor(() => expect(btn.getAttribute('aria-pressed')).toBe('true'));
+    const call = fetchMock.mock.calls.find((c) => c[1]?.method === 'PATCH')!;
+    expect(JSON.parse(call[1].body)).toEqual({ app_events_color: null });
+  });
+
+  it('guardar color y error al guardar', async () => {
+    routes['PATCH /api/settings'] = () => json({ error: { code: 'x', message: 'x' } }, 500);
+    render(Ajustes);
+    await fireEvent.click(await screen.findByLabelText(/Color #1a73e8 para eventos de la app/i));
+    expect(
+      (await screen.findAllByRole('alert')).some((a) =>
+        /No se pudo guardar el ajuste/.test(a.textContent ?? ''),
+      ),
+    ).toBe(true);
   });
 });

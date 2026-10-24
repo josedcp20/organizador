@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { CALENDAR_PALETTE, isHexColor } from '@organizador/shared';
-  import type { CalendarInfo, GoogleStatus } from '@organizador/shared';
+  import type { AppSettings, AppSettingsPatch, CalendarInfo, GoogleStatus } from '@organizador/shared';
+  import { fetchSettings, patchSettings } from '../lib/settings';
   import { session, meInfo } from '../lib/auth';
   import { ApiError, logout } from '../lib/api';
   import Banner from '../components/Banner.svelte';
@@ -164,12 +165,47 @@
   const roleLabel = (c: CalendarInfo) =>
     c.writable ? '' : c.accessRole === 'freeBusyReader' ? 'solo ocupado/libre' : 'solo lectura';
 
+  // --- Eventos (ajustes de creacion) ---
+  let settings = $state<AppSettings | null>(null);
+  let setError = $state('');
+  let setSaving = $state(false);
+  let setSaved = $state(false);
+  let setRev = $state(0);
+  const writableCals = $derived(calendars.filter((c) => c.writable && c.visible));
+
+  async function loadSettings() {
+    setError = '';
+    try {
+      settings = await fetchSettings();
+    } catch (e) {
+      setError = `No se pudieron cargar los ajustes de eventos. ${apiErrorMessage(e)}`;
+    }
+  }
+
+  async function saveSetting(patch: AppSettingsPatch) {
+    if (patch.app_events_color != null && !isHexColor(patch.app_events_color)) return;
+    setSaving = true;
+    setSaved = false;
+    setError = '';
+    try {
+      settings = await patchSettings(patch);
+      setSaved = true;
+    } catch (e) {
+      setError = `No se pudo guardar el ajuste. ${apiErrorMessage(e)}`;
+      setRev++; // vuelve a montar los controles con el valor guardado
+
+    } finally {
+      setSaving = false;
+    }
+  }
+
   async function loadStatus(): Promise<boolean> {
     loading = true;
     statusError = '';
     try {
       google = await fetchGoogleStatus();
       if (google.connected && !calLoaded && !calLoading) void loadCalendars(importAfterConnect);
+      if (google.connected && !settings) void loadSettings();
       return true;
     } catch (e) {
       statusError = `No se pudo obtener el estado de Google. ${apiErrorMessage(e)}`;
@@ -424,6 +460,75 @@
     </section>
   {/if}
 
+  {#if google?.connected}
+  <section class="group" aria-labelledby="ev-title" aria-busy={setSaving || (!settings && !setError)}>
+    <h2 id="ev-title">Eventos</h2>
+    {#if setError}
+      <Banner kind="error">{setError}</Banner>
+      {#if !settings}
+        <button type="button" class="btn" onclick={() => loadSettings()}>Reintentar</button>
+      {/if}
+    {:else if setSaved}
+      <Banner kind="info">Ajuste guardado.</Banner>
+    {/if}
+    {#if !settings && !setError}
+      <p role="status" class="muted">Cargando ajustes...</p>
+    {:else if settings}
+      {#key setRev}
+      <div class="fields">
+        <label class="field">
+          <span>Calendario para nuevos eventos</span>
+          <select
+            disabled={setSaving}
+            value={settings.default_write_calendar ?? ''}
+            onchange={(e) => saveSetting({ default_write_calendar: e.currentTarget.value || null })}
+          >
+            <option value="">Sin preferencia</option>
+            {#each writableCals as cal (cal.id)}
+              <option value={cal.id}>{cal.name}</option>
+            {/each}
+          </select>
+        </label>
+        <div class="field" role="group" aria-label="Color de eventos creados en la app">
+          <span>Color de eventos creados en la app</span>
+          <div class="swatches">
+            <button
+              type="button"
+              class="btn btn-quiet"
+              aria-pressed={settings.app_events_color === null}
+              disabled={setSaving}
+              onclick={() => saveSetting({ app_events_color: null })}>Color del calendario</button
+            >
+            {#each CALENDAR_PALETTE as color (color)}
+              <button
+                type="button"
+                class="swatch"
+                class:selected={settings.app_events_color === color}
+                style="--c: {color}"
+                aria-label={`Color ${color} para eventos de la app`}
+                aria-pressed={settings.app_events_color === color}
+                disabled={setSaving}
+                onclick={() => saveSetting({ app_events_color: color })}
+              ></button>
+            {/each}
+            <label class="custom">
+              <span class="muted small">Personalizado</span>
+              <input
+                type="color"
+                value={settings.app_events_color ?? '#1a73e8'}
+                disabled={setSaving}
+                aria-label="Color personalizado para eventos de la app"
+                onchange={(e) => saveSetting({ app_events_color: e.currentTarget.value })}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+      {/key}
+    {/if}
+  </section>
+  {/if}
+
   <section class="group" aria-labelledby="more-title">
     <h2 id="more-title">Más ajustes</h2>
     <ul class="list soon">
@@ -515,6 +620,19 @@
   .err {
     color: var(--danger);
     margin-top: var(--sp-1);
+  }
+
+  .fields {
+    display: grid;
+    gap: var(--sp-4);
+    padding: var(--sp-3) var(--sp-4);
+    border-radius: var(--r-m);
+    background: var(--surface);
+  }
+  .field {
+    display: grid;
+    gap: var(--sp-1);
+    font-weight: 600;
   }
 
   .cal {

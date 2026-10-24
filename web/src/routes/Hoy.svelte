@@ -6,7 +6,7 @@
   import { apiErrorMessage, fetchGoogleStatus } from '../lib/google';
   import { calendarsWithSyncError, fetchCalendars } from '../lib/calendars';
   import { fetchToday, toRows } from '../lib/today';
-  import { eventHref } from '../router';
+  import { eventHref, newEventHref } from '../router';
 
   let data = $state<TodayResponse | null>(null);
   let loading = $state(true);
@@ -71,6 +71,17 @@
 
 <PageHeader title="Hoy">
   {#snippet actions()}
+    {#if googleDown}
+      <a
+        class="btn btn-primary"
+        role="link"
+        aria-disabled="true"
+        aria-describedby="hoy-new-help">Nuevo evento</a
+      >
+      <p id="hoy-new-help" class="muted">Conecta Google en Ajustes para crear eventos</p>
+    {:else}
+      <a class="btn btn-primary" href={newEventHref(data?.today)}>Nuevo evento</a>
+    {/if}
     <button type="button" class="btn btn-quiet" disabled={loading} onclick={() => load()}>
       {loading ? 'Actualizando...' : 'Actualizar'}
     </button>

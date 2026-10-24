@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { currentParams, currentRoute, navigateTo } from './router';
+  import { currentParams, currentRoute, getQueryParams, navigateTo } from './router';
   import Evento from './routes/Evento.svelte';
+  import EventoEditar from './routes/EventoEditar.svelte';
   import { session, setReturnTo, takeReturnTo } from './lib/auth';
   import Layout from './components/Layout.svelte';
   import CalendarFilter from './components/CalendarFilter.svelte';
@@ -43,6 +44,12 @@
     {:else if $currentRoute === 'evento'}
       {#key $currentParams.join('/')}
         <Evento calendarId={$currentParams[0] ?? ''} eventId={$currentParams[1] ?? ''} />
+      {/key}
+    {:else if $currentRoute === 'nuevo-evento'}
+      <EventoEditar date={getQueryParams().get('fecha')} />
+    {:else if $currentRoute === 'editar-evento'}
+      {#key $currentParams.join('/')}
+        <EventoEditar calendarId={$currentParams[0] ?? ''} eventId={$currentParams[1] ?? ''} />
       {/key}
     {:else if $currentRoute === 'ajustes'}
       <Ajustes />

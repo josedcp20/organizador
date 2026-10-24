@@ -7,6 +7,9 @@ import {
   getRouteInfo,
   matchRoute,
   currentRoute,
+  getRouteParams,
+  newEventHref,
+  editEventHref,
 } from './router';
 
 const wait = () => new Promise((r) => setTimeout(r, 20));
@@ -110,6 +113,33 @@ describe('Router', () => {
       await wait();
       expect(seen[seen.length - 1]).toBe('login');
       unsub();
+    });
+  });
+
+  describe('event form routes', () => {
+    it('parses editar-evento with decoded params', () => {
+      window.location.hash = '#/editar-evento/a%40b/c';
+      expect(getCurrentRoute()).toBe('editar-evento');
+      expect(getRouteParams()).toEqual(['a@b', 'c']);
+    });
+
+    it('parses nuevo-evento with fecha query', () => {
+      window.location.hash = '#/nuevo-evento?fecha=2026-11-02';
+      expect(getCurrentRoute()).toBe('nuevo-evento');
+      expect(getQueryParams().get('fecha')).toBe('2026-11-02');
+    });
+
+    it('builds hrefs', () => {
+      expect(newEventHref()).toBe('#/nuevo-evento');
+      expect(newEventHref('2026-11-02')).toBe('#/nuevo-evento?fecha=2026-11-02');
+      expect(editEventHref('a@b', 'c/d')).toBe('#/editar-evento/a%40b/c%2Fd');
+      window.location.hash = editEventHref('a@b', 'c/d');
+      expect(getRouteParams()).toEqual(['a@b', 'c/d']);
+    });
+
+    it('unknown route still falls back to hoy', () => {
+      window.location.hash = '#/nada/x';
+      expect(getCurrentRoute()).toBe('hoy');
     });
   });
 });

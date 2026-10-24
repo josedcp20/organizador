@@ -13,7 +13,7 @@ import {
 import { apiFetch } from './api';
 import { formatDayLong, timeInMadrid } from './events';
 
-function path(calendarId: string, eventId: string): string {
+export function path(calendarId: string, eventId: string): string {
   return `/api/agenda/${encodeURIComponent(calendarId)}/${encodeURIComponent(eventId)}`;
 }
 

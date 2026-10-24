@@ -1,7 +1,16 @@
 import { readable } from 'svelte/store';
 
 // Router basado en hash para la SPA: `#/ruta?clave=valor`
-export type Route = 'hoy' | 'calendario' | 'notas' | 'nota-rapida' | 'ajustes' | 'evento' | 'login';
+export type Route =
+  | 'hoy'
+  | 'calendario'
+  | 'notas'
+  | 'nota-rapida'
+  | 'ajustes'
+  | 'evento'
+  | 'nuevo-evento'
+  | 'editar-evento'
+  | 'login';
 
 export interface RouteInfo {
   name: Route;
@@ -15,6 +24,8 @@ const ROUTES: Record<Route, string> = {
   'nota-rapida': '#/nota-rapida',
   ajustes: '#/ajustes',
   evento: '#/evento',
+  'nuevo-evento': '#/nuevo-evento',
+  'editar-evento': '#/editar-evento',
   login: '#/login',
 };
 
@@ -25,10 +36,12 @@ function fullPath(hash: string): string {
   return h.split('?')[0];
 }
 
-/** Nombre de ruta: solo `evento` admite segmentos extra (`#/evento/<cal>/<id>`). */
+const WITH_PARAMS = new Set(['evento', 'editar-evento']);
+
+/** Nombre de ruta: `evento` y `editar-evento` admiten segmentos extra (`#/evento/<cal>/<id>`). */
 function pathPart(hash: string): string {
   const [name, ...rest] = fullPath(hash).split('/');
-  return name === 'evento' || rest.length === 0 ? name : fullPath(hash);
+  return WITH_PARAMS.has(name) || rest.length === 0 ? name : fullPath(hash);
 }
 
 /** Segmentos tras el nombre de ruta, decodificados (`#/evento/a%40b/c` -> ['a@b', 'c']). */
@@ -46,6 +59,16 @@ export function getRouteParams(hash: string = window.location.hash): string[] {
 /** Hash de la pantalla de detalle de un evento (ids codificados). */
 export function eventHref(calendarId: string, eventId: string): string {
   return `#/evento/${encodeURIComponent(calendarId)}/${encodeURIComponent(eventId)}`;
+}
+
+/** Hash del formulario de alta; `date` (YYYY-MM-DD) es opcional. */
+export function newEventHref(date?: string): string {
+  return date ? `#/nuevo-evento?fecha=${encodeURIComponent(date)}` : '#/nuevo-evento';
+}
+
+/** Hash del formulario de edicion de un evento (ids codificados). */
+export function editEventHref(calendarId: string, eventId: string): string {
+  return `#/editar-evento/${encodeURIComponent(calendarId)}/${encodeURIComponent(eventId)}`;
 }
 
 export function getCurrentRoute(): Route {

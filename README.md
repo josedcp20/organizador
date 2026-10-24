@@ -45,6 +45,8 @@ Si queda un proceso `workerd.exe` colgado (p. ej. tras interrumpir los tests del
 - **Persistencia**: Cloudflare D1
 - **Herramientas**: npm workspaces, ESLint, Prettier, Vitest, TypeScript
 
+Los eventos recurrentes no se editan desde la app (solo ver).
+
 ## Zona horaria
 
 Referencia: `Europe/Madrid`

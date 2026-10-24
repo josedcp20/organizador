@@ -24,6 +24,7 @@
     type CalView,
   } from '../lib/events';
   import Banner from '../components/Banner.svelte';
+  import { newEventHref } from '../router';
   import PageHeader from '../components/PageHeader.svelte';
   import CalendarFilter from '../components/CalendarFilter.svelte';
   import DayList from '../components/DayList.svelte';
@@ -110,7 +111,11 @@
   }
 </script>
 
-<PageHeader title="Calendario" />
+<PageHeader title="Calendario">
+  {#snippet actions()}
+    <a class="btn btn-primary" href={newEventHref(anchor)}>Nuevo evento</a>
+  {/snippet}
+</PageHeader>
 
 <div class="toolbar">
   <h2 class="period" aria-live="polite">{periodTitle(view, anchor)}</h2>

@@ -43,4 +43,14 @@ describe('App mount', () => {
       .filter((a) => a.getAttribute('aria-current') === 'page');
     expect(active.length).toBe(2);
   });
+
+  it('mounts EventoEditar on #/nuevo-evento and #/editar-evento', async () => {
+    window.location.hash = '#/nuevo-evento?fecha=2026-11-02';
+    render(App);
+    expect(screen.getByRole('heading', { name: 'Nuevo evento' })).toBeTruthy();
+    window.location.hash = '#/editar-evento/a/b';
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Editar evento' })).toBeTruthy(),
+    );
+  });
 });

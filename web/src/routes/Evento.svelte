@@ -8,6 +8,8 @@
     type EventMetaScope,
   } from '@organizador/shared';
   import Banner from '../components/Banner.svelte';
+  import ConfirmExternal from '../components/ConfirmExternal.svelte';
+  import ConflictDialog from '../components/ConflictDialog.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import { ApiError } from '../lib/api';
   import { fetchCalendars } from '../lib/calendars';
@@ -22,8 +24,9 @@
     type MetaField,
     type MetaForm,
   } from '../lib/eventDetail';
+  import { conflictCurrent, deleteEvent, writeErrorMessage } from '../lib/eventWrite';
   import { apiErrorMessage } from '../lib/google';
-  import { navigateTo } from '../router';
+  import { editEventHref, navigateTo } from '../router';
 
   let { calendarId, eventId }: { calendarId: string; eventId: string } = $props();
 
@@ -50,11 +53,18 @@
   let saveError = $state('');
   let saveOk = $state('');
 
+  let deleting = $state(false);
+  let delError = $state('');
+  let extOpen = $state(false);
+  let conflictOpen = $state(false);
+  let conflictEvent = $state<EventInfo | null>(null);
+
   let seq = 0;
   let alive = true;
   let controller: AbortController | null = null;
 
   const recurring = $derived(!!event?.recurringEventId);
+  const canWrite = $derived(!!event && event.writable && !event.frozen && !recurring);
   const effScope = $derived<EventMetaScope>(recurring ? scope : 'instance');
   const stored = $derived(event?.metaScopes?.[effScope] ?? null);
   const daysValid = $derived(
@@ -169,6 +179,41 @@
     void run('clear', () => clearEventMeta(calendarId, eventId, s));
   }
 
+  function leave() {
+    if (window.history.length > 1) window.history.back();
+    else navigateTo('calendario');
+  }
+
+  async function doDelete(confirmExternal: boolean) {
+    deleting = true;
+    delError = '';
+    try {
+      await deleteEvent(calendarId, eventId, confirmExternal);
+      if (alive) leave();
+    } catch (e) {
+      if (!alive) return;
+      if (e instanceof ApiError && e.status === 410) return leave(); // ya borrado: exito
+      if (e instanceof ApiError && e.status === 404) {
+        notFound = true;
+        return;
+      }
+      const cur = conflictCurrent(e);
+      if (cur !== undefined) {
+        conflictEvent = cur;
+        conflictOpen = true;
+      } else if (e instanceof ApiError && e.status === 428) extOpen = true;
+      else if (!(e instanceof ApiError && e.status === 401)) delError = writeErrorMessage(e).text;
+    } finally {
+      if (alive) deleting = false;
+    }
+  }
+
+  function askDelete() {
+    if (!event) return;
+    if (event.origin === 'google') extOpen = true;
+    else if (window.confirm('¿Borrar este evento?')) void doDelete(false);
+  }
+
   function back() {
     if (window.history.length > 1) window.history.back();
     else navigateTo('hoy');
@@ -250,6 +295,57 @@
     <button type="button" class="btn" onclick={() => load()}>Reintentar</button>
   {:else if event}
     <PageHeader {title} />
+
+    {#if canWrite}
+      <div class="ev-actions">
+        <a
+          class="btn"
+          role={deleting ? "link" : undefined}
+          href={deleting ? undefined : editEventHref(calendarId, eventId)}
+          aria-disabled={deleting}>Editar</a
+        >
+        <button type="button" class="btn btn-danger" onclick={askDelete} disabled={deleting}>
+          {deleting ? 'Borrando...' : 'Borrar'}
+        </button>
+      </div>
+    {:else}
+      <p class="muted" data-testid="readonly-note">
+        {recurring
+          ? 'Los eventos recurrentes se editan desde Google Calendar.'
+          : event.frozen
+            ? 'Este evento es antiguo y no se puede modificar.'
+            : 'Este evento es de solo lectura.'}
+      </p>
+    {/if}
+    {#if delError}<Banner kind="error">{delError}</Banner>{/if}
+
+    <ConfirmExternal
+      open={extOpen}
+      action="delete"
+      summary={title}
+      onConfirm={() => {
+        extOpen = false;
+        void doDelete(true);
+      }}
+      onCancel={() => (extOpen = false)}
+    />
+    <ConflictDialog
+      open={conflictOpen}
+      mode="delete"
+      current={conflictEvent}
+      onUseServer={() => {
+        conflictOpen = false;
+        void load();
+      }}
+      onOverwrite={() => {
+        conflictOpen = false;
+        void doDelete(event?.origin === 'google');
+      }}
+      onCancel={() => {
+        conflictOpen = false;
+        if (conflictEvent === null) notFound = true;
+      }}
+    />
 
     <div class="cols">
       <section class="panel" aria-labelledby="ev-datos">
@@ -494,6 +590,11 @@
     margin-bottom: var(--sp-2);
     padding: 0 var(--sp-3) 0 var(--sp-2);
     gap: var(--sp-1);
+  }
+  .ev-actions {
+    display: flex;
+    gap: var(--sp-2);
+    margin-bottom: var(--sp-4);
   }
   .cols {
     display: grid;

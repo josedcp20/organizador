@@ -385,3 +385,186 @@ describe('Navegacion', () => {
     expect(link.querySelector('[role="alert"]')).toBeNull();
   });
 });
+
+describe('Evento: editar y borrar', () => {
+  const dels = () =>
+    fetchMock.mock.calls.filter(
+      (c) => c[1]?.method === 'DELETE' && !String(c[0]).includes('/meta'),
+    );
+  const err = (status: number, code: string, extra: object = {}) =>
+    json({ error: { code, message: 'x' }, ...extra }, status);
+
+  it('muestra Editar (enlace) y Borrar', async () => {
+    mount();
+    const edit = await screen.findByRole('link', { name: 'Editar' });
+    expect(edit.getAttribute('href')).toBe('#/editar-evento/c%40x/e1');
+    expect(screen.getByRole('button', { name: 'Borrar' })).toBeTruthy();
+  });
+
+  it.each([
+    ['recurrente', { recurringEventId: 'r' }, /recurrentes/],
+    ['congelado', { frozen: true }, /antiguo/],
+    ['solo lectura', { writable: false }, /solo lectura/],
+  ])('%s: sin botones y con aviso', async (_n, over, text) => {
+    current = ev(over);
+    mount();
+    await screen.findByRole('heading', { name: 'Dentista' });
+    expect(screen.queryByRole('link', { name: 'Editar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Borrar' })).toBeNull();
+    expect(screen.getByTestId('readonly-note').textContent).toMatch(text);
+  });
+
+  it('evento de la app: confirm simple, DELETE sin confirm_external y navega', async () => {
+    current = ev({ origin: 'app' });
+    const spy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window.history, 'length', 'get').mockReturnValue(1);
+    respond = (m) => (m === 'DELETE' ? new Response(null, { status: 204 }) : null);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    await waitFor(() => expect(dels()).toHaveLength(1));
+    expect(String(dels()[0][0])).toBe(`${BASE}/api/agenda/c%40x/e1`);
+    await waitFor(() => expect(getCurrentRoute()).toBe('calendario'));
+    spy.mockRestore();
+  });
+
+  it('borrar con historial: vuelve atras', async () => {
+    current = ev({ origin: 'app' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window.history, 'length', 'get').mockReturnValue(3);
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    respond = (m) => (m === 'DELETE' ? new Response(null, { status: 204 }) : null);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    await waitFor(() => expect(back).toHaveBeenCalled());
+    vi.restoreAllMocks();
+  });
+
+  it('DELETE 410 es exito: navega', async () => {
+    current = ev({ origin: 'app' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(window.history, 'length', 'get').mockReturnValue(1);
+    window.location.hash = '#/hoy';
+    respond = (m) => (m === 'DELETE' ? err(410, 'gone') : null);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    await waitFor(() => expect(getCurrentRoute()).toBe('calendario'));
+    vi.restoreAllMocks();
+  });
+
+  it('DELETE 404: el evento ya no existe', async () => {
+    current = ev({ origin: 'app' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    respond = (m) => (m === 'DELETE' ? err(404, 'not_found') : null);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    expect(await screen.findByText('El evento ya no existe.')).toBeTruthy();
+    vi.restoreAllMocks();
+  });
+
+  it('409 sin current: Cerrar muestra que el evento ya no existe', async () => {
+    respond = (m) => (m === 'DELETE' ? err(409, 'conflict', { current: null }) : null);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar en Google' }));
+    await fireEvent.click(await screen.findByRole('button', { name: /Cerrar|Cancelar/ }));
+    expect(await screen.findByText('El evento ya no existe.')).toBeTruthy();
+  });
+
+  it('Editar pierde el href mientras se borra', async () => {
+    current = ev({ origin: 'app' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    respond = (m) => (m === 'DELETE' ? new Promise<Response>(() => {}) : null);
+    mount();
+    expect((await screen.findByRole('link', { name: 'Editar' })).getAttribute('href')).toContain(
+      '#/editar-evento/',
+    );
+    await fireEvent.click(screen.getByRole('button', { name: 'Borrar' }));
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Editar' }).getAttribute('href')).toBeNull(),
+    );
+    vi.restoreAllMocks();
+  });
+
+  it('evento de la app: cancelar el confirm no borra', async () => {
+    current = ev({ origin: 'app' });
+    const spy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    expect(dels()).toHaveLength(0);
+    spy.mockRestore();
+  });
+
+  it('evento de Google: ConfirmExternal y confirm_external=true', async () => {
+    respond = (m) => (m === 'DELETE' ? new Response(null, { status: 204 }) : null);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    expect(dels()).toHaveLength(0);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar en Google' }));
+    await waitFor(() => expect(dels()).toHaveLength(1));
+    expect(String(dels()[0][0])).toContain('confirm_external=true');
+  });
+
+  it('428 inesperado abre ConfirmExternal y reintenta', async () => {
+    current = ev({ origin: 'app' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let first = true;
+    respond = (m) => {
+      if (m !== 'DELETE') return null;
+      if (first) {
+        first = false;
+        return err(428, 'confirmation_required');
+      }
+      return new Response(null, { status: 204 });
+    };
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar en Google' }));
+    await waitFor(() => expect(dels()).toHaveLength(2));
+    expect(String(dels()[1][0])).toContain('confirm_external=true');
+    vi.restoreAllMocks();
+  });
+
+  it('409 conflict: borrar de todas formas repite el DELETE', async () => {
+    let n = 0;
+    respond = (m) => {
+      if (m !== 'DELETE') return null;
+      return n++ === 0
+        ? err(409, 'conflict', { current: ev({ summary: 'Nuevo titulo' }) })
+        : new Response(null, { status: 204 });
+    };
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar en Google' }));
+    expect(await screen.findByText('Nuevo titulo')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Borrar de todas formas' }));
+    await waitFor(() => expect(dels()).toHaveLength(2));
+    expect(String(dels()[1][0])).toContain('confirm_external=true');
+  });
+
+  it('409 conflict: ver la version de Google recarga el detalle', async () => {
+    respond = (m) =>
+      m === 'DELETE' ? err(409, 'conflict', { current: ev({ summary: 'Nuevo titulo' }) }) : null;
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar en Google' }));
+    const before = fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/agenda/')).length;
+    await fireEvent.click(await screen.findByRole('button', { name: 'Ver la versión de Google' }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/agenda/')).length,
+      ).toBeGreaterThan(before),
+    );
+    expect(dels()).toHaveLength(1);
+  });
+
+  it('error al borrar: banner y el boton vuelve a estar activo', async () => {
+    current = ev({ origin: 'app' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    respond = (m) => (m === 'DELETE' ? err(423, 'frozen') : null);
+    mount();
+    await fireEvent.click(await screen.findByRole('button', { name: 'Borrar' }));
+    expect(await screen.findByText(/hace más de un mes/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Borrar' }).hasAttribute('disabled')).toBe(false);
+    vi.restoreAllMocks();
+  });
+});

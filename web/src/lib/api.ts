@@ -5,13 +5,16 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly retryAfter?: number;
+  /** Cuerpo JSON de la respuesta de error (p. ej. `current` del 409 conflict). */
+  readonly body?: unknown;
 
-  constructor(status: number, code: string, message: string, retryAfter?: number) {
+  constructor(status: number, code: string, message: string, retryAfter?: number, body?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.retryAfter = retryAfter;
+    this.body = body;
   }
 }
 
@@ -120,8 +123,10 @@ export async function apiFetch<T = unknown>(endpoint: string, opts: ApiOptions =
 
   let code = 'error';
   let message = `Error ${res.status}`;
+  let body: unknown;
   try {
     const data = (await res.json()) as { error?: { code?: string; message?: string } };
+    body = data;
     if (data?.error?.code) code = data.error.code;
     if (data?.error?.message) message = data.error.message;
   } catch {
@@ -130,11 +135,11 @@ export async function apiFetch<T = unknown>(endpoint: string, opts: ApiOptions =
 
   if (res.status === 401) {
     if (!explicit) await logout();
-    throw new ApiError(401, code, message);
+    throw new ApiError(401, code, message, undefined, body);
   }
   if (res.status === 429) {
     const ra = Number.parseInt(res.headers.get('Retry-After') ?? '', 10);
-    throw new ApiError(429, code, message, Number.isFinite(ra) && ra > 0 ? ra : undefined);
+    throw new ApiError(429, code, message, Number.isFinite(ra) && ra > 0 ? ra : undefined, body);
   }
-  throw new ApiError(res.status, code, message);
+  throw new ApiError(res.status, code, message, undefined, body);
 }

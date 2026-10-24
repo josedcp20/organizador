@@ -61,6 +61,7 @@ function urlOf(call: unknown[]): string {
 
 beforeEach(() => {
   routes = {
+    'GET /api/settings': () => json({ app_events_color: null, default_write_calendar: null }),
     'GET /api/google/status': () => json(disconnected()),
     'GET /api/calendars': () => json({ calendars: [CAL_A] }),
     'POST /api/calendars/refresh': () => json({ calendars: [CAL_A] }),
@@ -320,7 +321,7 @@ describe('Ajustes: seccion Calendarios', () => {
   it('muestra lista con nombre, "solo lectura", interruptor y paleta', async () => {
     routes['GET /api/calendars'] = () => json({ calendars: [CAL_A, CAL_B] });
     render(Ajustes);
-    expect(await screen.findByText('Personal')).toBeTruthy();
+    expect(await screen.findByText('Personal', { selector: '.cal-name' })).toBeTruthy();
     expect(screen.getByText('Compartido')).toBeTruthy();
     expect(screen.getAllByText('solo lectura')).toHaveLength(1);
     const sw = screen.getByRole('switch', { name: 'Mostrar Personal' }) as HTMLInputElement;
@@ -439,7 +440,7 @@ describe('Ajustes: seccion Calendarios', () => {
 
   it('boton "Actualizar desde Google" llama a refresh y muestra el resultado', async () => {
     render(Ajustes);
-    await screen.findByText('Personal');
+    await screen.findByText('Personal', { selector: '.cal-name' });
     routes['POST /api/calendars/refresh'] = () => json({ calendars: [CAL_A, CAL_B] });
     await fireEvent.click(screen.getByRole('button', { name: 'Actualizar desde Google' }));
     expect(await screen.findByText('Compartido')).toBeTruthy();
@@ -448,7 +449,7 @@ describe('Ajustes: seccion Calendarios', () => {
 
   it('refresh con google_not_connected: aviso de error', async () => {
     render(Ajustes);
-    await screen.findByText('Personal');
+    await screen.findByText('Personal', { selector: '.cal-name' });
     routes['POST /api/calendars/refresh'] = () =>
       json({ error: { code: 'google_not_connected', message: 'x' } }, 409);
     await fireEvent.click(screen.getByRole('button', { name: 'Actualizar desde Google' }));

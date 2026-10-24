@@ -153,3 +153,23 @@ describe('logout', () => {
     await expect(clearApiCaches()).resolves.toBeUndefined();
   });
 });
+
+describe('ApiError.body', () => {
+  it('conserva el cuerpo JSON de un 409 (current)', async () => {
+    setToken('t');
+    fetchMock.mockResolvedValue(
+      json({ error: { code: 'conflict', message: 'x' }, current: { id: 'e1' } }, { status: 409 }),
+    );
+    const err = await apiFetch('/api/agenda/c/e').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).body).toMatchObject({ current: { id: 'e1' } });
+  });
+
+  it('un 500 sin JSON deja body undefined', async () => {
+    setToken('t');
+    fetchMock.mockResolvedValue(new Response('boom', { status: 500 }));
+    const err = (await apiFetch('/api/x').catch((e: unknown) => e)) as ApiError;
+    expect(err.status).toBe(500);
+    expect(err.body).toBeUndefined();
+  });
+});
