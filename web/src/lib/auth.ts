@@ -58,6 +58,11 @@ export function getToken(): string | null {
   return readToken();
 }
 
+/** true si el token es de sesion Face ID (`s1.`) y no el estatico. */
+export function isSessionToken(token: string | null = readToken()): boolean {
+  return token !== null && token.startsWith('s1.');
+}
+
 export function isLoggedIn(): boolean {
   return readToken() !== null;
 }

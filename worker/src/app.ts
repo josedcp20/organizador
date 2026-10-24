@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import type { Env } from './env';
+import type { AppEnv } from './env';
 import { errorBody } from './errors';
 import { auth } from './middleware/auth';
 import { cors } from './middleware/cors';
@@ -11,11 +11,12 @@ import { me } from './routes/me';
 import { notes } from './routes/notes';
 import { oauth } from './routes/oauth';
 import { quickNotes } from './routes/quickNotes';
+import { session } from './routes/session';
 import { settings } from './routes/settings';
 import { sync } from './routes/sync';
 import { getVersion } from './version';
 
-export const app = new Hono<{ Bindings: Env }>();
+export const app = new Hono<AppEnv>();
 
 app.use('*', cors);
 // Auth en todo /api/* (excepto /api/health, ver PUBLIC_API_PATHS). /oauth/* (start/callback de Google) queda fuera: se autoriza con ticket/state firmados.
@@ -23,6 +24,7 @@ app.use('/api/*', auth);
 
 app.get('/api/health', (c) => c.json({ ok: true, version: getVersion(c.env) }));
 app.route('/', me);
+app.route('/', session);
 app.route('/', oauth);
 app.route('/', calendars);
 app.route('/', agenda);

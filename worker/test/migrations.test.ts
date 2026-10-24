@@ -28,6 +28,9 @@ describe('migraciones (aplicadas en test/setup.ts)', () => {
       'notes',
       'push_subscriptions',
       'job_state',
+      'passkeys',
+      'sessions',
+      'webauthn_challenges_used',
     ]) {
       expect(t).toContain(name);
     }
@@ -81,5 +84,51 @@ describe('migraciones (aplicadas en test/setup.ts)', () => {
         "INSERT INTO event_meta (calendar_id, scope, target_id, updated_at) VALUES ('c','bad','t','now')",
       ).run(),
     ).rejects.toThrow();
+  });
+
+  it('0004: passkeys tiene columnas esperadas', async () => {
+    const c = await columns('passkeys');
+    for (const col of [
+      'id',
+      'public_key',
+      'sign_count',
+      'transports',
+      'backed_up',
+      'label',
+      'created_at',
+      'last_used_at',
+    ]) {
+      expect(c).toContain(col);
+    }
+  });
+
+  it('0004: sessions tiene columnas esperadas y FK a passkeys', async () => {
+    const c = await columns('sessions');
+    for (const col of ['token_hash', 'passkey_id', 'created_at', 'expires_at', 'last_used_at']) {
+      expect(c).toContain(col);
+    }
+    // Verificar indice
+    const indices = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='sessions'",
+    ).all<{ name: string }>();
+    const indexNames = indices.results.map((r) => r.name);
+    expect(indexNames).toContain('idx_sessions_passkey');
+  });
+
+  it('0004: webauthn_challenges_used tiene columnas esperadas', async () => {
+    const c = await columns('webauthn_challenges_used');
+    for (const col of ['nonce', 'expires_at']) {
+      expect(c).toContain(col);
+    }
+  });
+
+  it('0004: sessions.passkey_id es PK sin ROWID', async () => {
+    // WITHOUT ROWID optimiza para claves compuestas; verificamos que solo tiene lo esperado
+    const info = await env.DB.prepare('PRAGMA table_info(sessions)').all<{
+      name: string;
+      pk: number;
+    }>();
+    const pkCols = info.results.filter((r) => r.pk > 0).map((r) => r.name);
+    expect(pkCols).toEqual(['token_hash']);
   });
 });

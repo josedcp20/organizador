@@ -1,3 +1,4 @@
+import { purgeExpired } from '../db/sessions';
 import { purgeAuthFailures } from '../middleware/auth';
 
 /**
@@ -14,12 +15,18 @@ export async function cleanupExpiredNotes(db: D1Database, nowMs: number): Promis
   return r.meta.changes ?? 0;
 }
 
-/** Paso `cleanup` del cron: notas caducadas + contadores antiguos de auth_failures. */
+/** Paso `cleanup` del cron: notas caducadas + auth_failures + sesiones y challenges WebAuthn caducados. */
 export async function runCleanup(
   db: D1Database,
   nowMs: number,
-): Promise<{ notes: number; authFailures: number }> {
+): Promise<{
+  notes: number;
+  authFailures: number;
+  sessions: number;
+  challenges: number;
+}> {
   const notes = await cleanupExpiredNotes(db, nowMs);
   const authFailures = await purgeAuthFailures(db, nowMs);
-  return { notes, authFailures };
+  const { sessions, challenges } = await purgeExpired(db, nowMs);
+  return { notes, authFailures, sessions, challenges };
 }

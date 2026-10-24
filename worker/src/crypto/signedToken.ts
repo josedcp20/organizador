@@ -1,13 +1,14 @@
 import { fromBase64Url, randomBytes, timingSafeEqualBytes, toBase64Url } from './encoding';
 
 /**
- * Tokens cortos firmados con HMAC-SHA256 (clave OAUTH_STATE_KEY) para el ticket de /start y el
- * `state` de OAuth. Formato: `v1.<nonce base64url>.<exp ms>.<firma base64url>`. La firma cubre
- * el proposito (separacion de dominio: un ticket no vale como state y viceversa), el nonce y la
+ * Tokens cortos firmados con HMAC-SHA256 (clave OAUTH_STATE_KEY) para el ticket de /start, el
+ * `state` de OAuth, y challenges de WebAuthn (registro y login). Formato:
+ * `v1.<nonce base64url>.<exp ms>.<firma base64url>`. La firma cubre el proposito (separacion de
+ * dominio: un ticket no vale como state, y los challenges no valen uno por otro), el nonce y la
  * caducidad. La firma solo evita trabajo/escrituras con valores falsificados; el UN SOLO USO lo
- * garantiza el registro en D1 (ver google/oauthStore.ts).
+ * garantiza el registro en D1 (ver google/oauthStore.ts, webauthn/challenge.ts).
  */
-export type TokenPurpose = 'ticket' | 'state';
+export type TokenPurpose = 'ticket' | 'state' | 'webauthn_reg' | 'webauthn_login';
 
 const VERSION = 'v1';
 const NONCE_RE = /^[A-Za-z0-9_-]{22,64}$/;

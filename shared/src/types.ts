@@ -427,3 +427,91 @@ export interface QuickNoteCreate {
   body: string;
   expiry?: NoteExpiryInput; // defecto: today
 }
+
+// --- Autenticacion con passkeys (WebAuthn, Face ID en iOS)
+
+/** Tipo de autenticacion en una sesion. */
+export type AuthKind = 'static' | 'session';
+
+/** Informacion de una passkey registrada (nunca expone la clave publica). */
+export interface PasskeyInfo {
+  /** credential id (base64url) */
+  id: string;
+  label: string;
+  createdAt: string; // ISO-8601 UTC
+  lastUsedAt: string | null; // ISO-8601 UTC
+  backedUp: boolean;
+}
+
+/** `GET /api/passkeys` */
+export interface PasskeysResponse {
+  passkeys: PasskeyInfo[];
+}
+
+/** `POST /api/passkeys/login`: resultado de un login exitoso con passkey. */
+export interface PasskeyLoginResult {
+  token: string; // s1.<base64url>
+  expiresAt: string; // ISO-8601 UTC
+}
+
+/** Body de `POST /api/passkeys/register`. */
+export interface PasskeyRegisterBody {
+  response: RegistrationResponseJSON;
+  label?: string; // <= 60 chars, default "iPhone"
+}
+
+/**
+ * Respuesta de `navigator.credentials.create()` serializada a JSON.
+ * Forma minima compatible con @simplewebauthn/server.
+ */
+export interface RegistrationResponseJSON {
+  id: string; // credential id (base64url)
+  rawId: string; // idem (redundancia JSON)
+  response: {
+    clientDataJSON: string; // base64url
+    attestationObject: string; // base64url
+    transports?: ('internal' | 'hybrid')[];
+  };
+  type: 'public-key';
+}
+
+/**
+ * Respuesta de `navigator.credentials.get()` serializada a JSON.
+ * Forma minima compatible con @simplewebauthn/server.
+ */
+export interface AuthenticationResponseJSON {
+  id: string; // credential id (base64url)
+  rawId: string; // idem (redundancia JSON)
+  response: {
+    clientDataJSON: string; // base64url
+    authenticatorData: string; // base64url
+    signature: string; // base64url
+    userHandle?: string; // base64url o null
+  };
+  type: 'public-key';
+}
+
+/** `GET /api/me`: respuesta actualizada con autenticacion. */
+export interface MeResponse {
+  ok: boolean;
+  version: string;
+  tz: string;
+  /** Tipo de autenticacion activa */
+  auth: AuthKind;
+  /** Caducidad de la sesion actual (si `auth === 'session'`) */
+  sessionExpiresAt?: string; // ISO-8601 UTC
+}
+
+/** Limites y tiempos de vida relacionados con passkeys. */
+export const PASSKEY_LIMITS = {
+  /** Longitud maxima del label de una passkey. */
+  labelMax: 60,
+  /** Numero maximo de passkeys registradas. */
+  maxPasskeys: 10,
+  /** Vida del challenge (segundos). */
+  challengeTtlSeconds: 300, // 5 min
+  /** Vida de una sesion Face ID (segundos, D-FID1). */
+  sessionTtlSeconds: 30 * 24 * 60 * 60, // 30 dias
+  /** Vida del nonce consumido (segundos, debe ser > challengeTtlSeconds). */
+  consumedNonceTtlSeconds: 600, // 10 min
+} as const;

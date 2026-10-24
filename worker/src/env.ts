@@ -22,3 +22,13 @@ export interface Env {
   VAPID_PUBLIC_KEY?: string;
   VAPID_SUBJECT?: string;
 }
+
+/** Tipo de Hono con las variables de contexto que fija el middleware de auth. */
+export interface AppEnv {
+  Bindings: Env;
+  Variables: {
+    /** 'static' = token maestro, 'session' = token s1.* de passkey. Ausente en rutas publicas. */
+    authKind: 'static' | 'session';
+    sessionExpiresAt?: string;
+  };
+}

@@ -1,4 +1,4 @@
-import { clearToken, getToken } from './auth';
+import { clearToken, getToken, isSessionToken } from './auth';
 import { navigateTo } from '../router';
 
 export class ApiError extends Error {
@@ -71,8 +71,24 @@ export async function clearApiCaches(): Promise<void> {
   }
 }
 
+/** Endpoints sin Authorization: no exigen token ni disparan logout ante 401. */
+const PUBLIC_ENDPOINTS = new Set([
+  '/api/health',
+  '/api/passkeys/login/options',
+  '/api/passkeys/login',
+]);
+
+function isPublic(endpoint: string): boolean {
+  return PUBLIC_ENDPOINTS.has(endpoint.split('?')[0]);
+}
+
 /** Cierra sesion: borra token y caches de API y vuelve a login. */
 export async function logout(): Promise<void> {
+  const token = getToken();
+  // Best effort, sin bloquear: revoca la sesion Face ID en el servidor.
+  if (token && isSessionToken(token)) {
+    apiFetch('/api/session/logout', { method: 'POST', token }).catch(() => undefined);
+  }
   clearToken();
   await clearApiCaches();
   navigateTo('login');
@@ -89,12 +105,12 @@ export interface ApiOptions {
 export async function apiFetch<T = unknown>(endpoint: string, opts: ApiOptions = {}): Promise<T> {
   assertEndpoint(endpoint);
   const base = getApiBase();
-  const isHealth = endpoint === '/api/health' || endpoint.startsWith('/api/health?');
-  const explicit = opts.token !== undefined;
+  const pub = isPublic(endpoint);
+  const explicit = opts.token !== undefined || pub;
   const token = explicit ? opts.token : getToken();
 
   const headers: Record<string, string> = { Accept: 'application/json' };
-  if (!isHealth) {
+  if (!pub) {
     if (!token) throw new ApiError(0, 'no_token', 'No hay sesion iniciada.');
     headers.Authorization = `Bearer ${token}`;
   }

@@ -1,6 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { now } from '../clock';
-import type { Env } from '../env';
+import { findSession, isSessionToken, touchSession } from '../db/sessions';
+import type { AppEnv } from '../env';
 import { errorBody } from '../errors';
 
 export const MAX_FAILURES = 10;
@@ -236,7 +237,7 @@ function misconfigured(c: Context, code: string): Response {
 
 // Los preflight OPTIONS los resuelve cors (montado antes) sin llegar aqui: cors es el unico
 // responsable de ellos y auth no los trata.
-export const auth: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
+export const auth: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (PUBLIC_API_PATHS.has(c.req.path)) {
     return next();
   }
@@ -263,7 +264,21 @@ export const auth: MiddlewareHandler<{ Bindings: Env }> = async (c, next) => {
     return rateLimited(c, row.blocked_until, t);
   }
 
-  const ok = await verifyToken(c.req.header('Authorization'), secret);
+  const header = c.req.header('Authorization');
+  const bearer = extractBearer(header);
+  let ok: boolean;
+  if (isSessionToken(bearer)) {
+    const sess = await findSession(db, bearer, t);
+    ok = sess !== null;
+    if (sess) {
+      c.set('authKind', 'session');
+      c.set('sessionExpiresAt', sess.expiresAt);
+      await touchSession(db, sess, t);
+    }
+  } else {
+    ok = await verifyToken(header, secret);
+    if (ok) c.set('authKind', 'static');
+  }
 
   if (ok) {
     if (row) {
