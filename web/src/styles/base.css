@@ -185,6 +185,25 @@ label {
   font-weight: 600;
 }
 
+/* Tactil (iPhone): select y fecha/hora con la "pildora" nativa de iOS, sin caja propia */
+@media (hover: none) and (pointer: coarse) {
+  select,
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'],
+  input[type='month'] {
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    min-height: var(--tap);
+    padding: revert; /* aspecto nativo de iOS: pildora gris y chevron del sistema */
+    border: revert;
+    background: revert;
+    color-scheme: light dark; /* la rueda y la pildora siguen el modo claro/oscuro */
+    font-size: max(16px, 1rem);
+  }
+}
+
 /* Lista agrupada (estilo iOS): un contenedor, filas separadas por linea fina */
 .list {
   list-style: none;

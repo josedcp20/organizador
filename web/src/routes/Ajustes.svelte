@@ -634,6 +634,18 @@
     gap: var(--sp-1);
     font-weight: 600;
   }
+  /* iOS: etiqueta a la izquierda, selector a la derecha */
+  @media (hover: none) and (pointer: coarse) {
+    label.field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-3);
+    }
+    label.field > select {
+      max-width: 55%;
+    }
+  }
 
   .cal {
     padding: var(--sp-3) var(--sp-4);

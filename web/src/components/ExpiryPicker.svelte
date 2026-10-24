@@ -52,4 +52,28 @@
   .days input {
     width: 5.5rem;
   }
+
+  /* iOS: etiqueta a la izquierda, control a la derecha */
+  @media (hover: none) and (pointer: coarse) {
+    .expiry {
+      flex-wrap: nowrap;
+      justify-content: space-between;
+    }
+    .expiry label {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    select {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 60%;
+    }
+    .days {
+      flex: none;
+    }
+    .days input {
+      width: 4.5rem;
+      text-align: right;
+    }
+  }
 </style>

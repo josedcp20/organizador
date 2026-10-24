@@ -469,6 +469,24 @@
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
     column-gap: var(--sp-3);
   }
+  /* iOS: etiqueta a la izquierda, fecha/hora/selector a la derecha */
+  @media (hover: none) and (pointer: coarse) {
+    .pair {
+      display: block;
+    }
+    .field:has(> input[type='date'], > input[type='time'], > select) {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-3);
+    }
+    .field:has(> input[type='date'], > input[type='time'], > select) > label {
+      margin-bottom: 0;
+    }
+    .field > select {
+      max-width: 60%;
+    }
+  }
   .help {
     margin-top: var(--sp-1);
     font-size: var(--fs-s);
