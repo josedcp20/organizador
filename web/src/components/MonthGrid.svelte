@@ -33,22 +33,22 @@
   {/each}
   {#each days as day (day)}
     {@const evs = byDay.get(day) ?? []}
-    <button
-      type="button"
-      class="cell"
-      class:other={!day.startsWith(month)}
-      class:today={day === today}
-      aria-label={`${formatDayLong(day)}, ${eventsLabel(evs.length)}`}
-      onclick={() => onPickDay(day)}
-    >
-      <span class="num">{Number(day.slice(8))}</span>
+    <div class="cell" class:other={!day.startsWith(month)} class:today={day === today}>
+      <button
+        type="button"
+        class="pick"
+        aria-label={`${formatDayLong(day)}, ${eventsLabel(evs.length)}`}
+        onclick={() => onPickDay(day)}
+      >
+        <span class="num">{Number(day.slice(8))}</span>
+      </button>
       <span class="evs">
         {#each evs.slice(0, MAX) as ev (ev.calendarId + ev.id)}
           <EventChip event={ev} {day} compact />
         {/each}
         {#if evs.length > MAX}<span class="more">+{evs.length - MAX}</span>{/if}
       </span>
-    </button>
+    </div>
   {/each}
 </div>
 
@@ -76,7 +76,7 @@
     gap: 0.2rem;
     min-height: 5.5rem;
     padding: 0.2rem;
-    border: none;
+    position: relative;
     border-right: 1px solid #e0e0e0;
     border-bottom: 1px solid #e0e0e0;
     background: #fff;
@@ -84,6 +84,20 @@
     font: inherit;
     color: inherit;
     min-width: 0;
+  }
+  /* El boton cubre toda la celda; los enlaces de evento quedan por encima */
+  .pick {
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+  }
+  .pick::after {
+    content: '';
+    position: absolute;
+    inset: 0;
   }
   .cell.other {
     background: #f7f7f7;

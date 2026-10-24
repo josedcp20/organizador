@@ -5,6 +5,7 @@
   import { apiErrorMessage, fetchGoogleStatus } from '../lib/google';
   import { calendarsWithSyncError, fetchCalendars } from '../lib/calendars';
   import { fetchToday, toRows } from '../lib/today';
+  import { eventHref } from '../router';
 
   let title = 'Hoy';
 
@@ -100,7 +101,12 @@
       {:else}
         <ul class="events">
           {#each day.rows as row (row.id)}
-            <li class="event" style:border-left-color={row.color}>
+            <li class="event-item">
+              <a
+                class="event"
+                style:border-left-color={row.color}
+                href={eventHref(row.calendarId, row.eventId)}
+              >
               <span class="time">{row.time}</span>
               <span class="body">
                 <span class="title">{row.title}</span>
@@ -114,13 +120,20 @@
                     title="Pendiente de sincronizar">&#9201;</span
                   >
                 {/if}
-                {#if row.location}<span class="loc">{row.location}</span>{/if}
-                {#if row.pendingError}
-                  <span class="warn" role="alert"
-                    >No se pudo enviar a Google: {row.pendingError}</span
+                {#if row.remind}
+                  <span role="img" aria-label="Con aviso" title="Con aviso">&#128276;</span>
+                {/if}
+                {#if row.hasNotes}
+                  <span role="img" aria-label="Con notas privadas" title="Con notas privadas"
+                    >&#128221;</span
                   >
                 {/if}
+                {#if row.location}<span class="loc">{row.location}</span>{/if}
+                {#if row.pendingError}
+                  <span class="warn">No se pudo enviar a Google: {row.pendingError}</span>
+                {/if}
               </span>
+              </a>
             </li>
           {/each}
         </ul>
@@ -192,11 +205,17 @@
     margin: 0;
   }
 
+  .event-item {
+    margin-bottom: 0.4rem;
+  }
+
   .event {
+    min-height: 44px;
+    color: inherit;
+    text-decoration: none;
     display: flex;
     gap: 0.75rem;
     padding: 0.5rem 0.75rem;
-    margin-bottom: 0.4rem;
     border-left: 5px solid #1a73e8;
     background: #f7f7f7;
     border-radius: 4px;

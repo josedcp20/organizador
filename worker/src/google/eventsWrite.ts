@@ -1,5 +1,10 @@
 import { isWritableRole } from '../db/calendars';
-import { applyGoogleDelete, applyGoogleEvent, calendarAccessRole } from '../db/eventWrites';
+import {
+  applyGoogleDelete,
+  applyGoogleEvent,
+  calendarAccessRole,
+  type PendingMarker,
+} from '../db/eventWrites';
 import type { Env } from '../env';
 import { parseGoogleEvent, type ParsedEvent } from '../sync/parse';
 import { DEFAULT_TZ } from '../sync/window';
@@ -44,6 +49,11 @@ import {
 
 export interface WriteOptions {
   retry?: RetryOptions;
+  /**
+   * Marca pendiente de la escritura (T3.7): al confirmar solo se limpia el pendiente si la fila
+   * sigue teniendo ESTA marca (ver db/eventWrites.ts).
+   */
+  pending?: PendingMarker;
 }
 
 export interface InsertInput {
@@ -186,7 +196,10 @@ export async function insertEvent(
   }
   const event = parseResponse(body, 'insert');
   if (event.id !== eventId) throw new GoogleWriteError('bad_response');
-  await applyGoogleEvent(env.DB, input.calendarId, event, { localId: input.localId });
+  await applyGoogleEvent(env.DB, input.calendarId, event, {
+    localId: input.localId,
+    pending: opts.pending,
+  });
   return { created, event };
 }
 
@@ -209,7 +222,7 @@ export async function patchEvent(
   );
   const event = parseResponse(body, 'patch');
   if (event.id !== input.eventId) throw new GoogleWriteError('bad_response');
-  await applyGoogleEvent(env.DB, input.calendarId, event);
+  await applyGoogleEvent(env.DB, input.calendarId, event, { pending: opts.pending });
   return { event };
 }
 
@@ -237,7 +250,7 @@ export async function deleteEvent(
     }
     alreadyDeleted = true;
   }
-  await applyGoogleDelete(env.DB, input.calendarId, input.eventId);
+  await applyGoogleDelete(env.DB, input.calendarId, input.eventId, { pending: opts.pending });
   return { alreadyDeleted };
 }
 

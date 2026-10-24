@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { CalEvent } from '../lib/events';
   import { eventTimeLabel } from '../lib/events';
+  import { eventHref } from '../router';
 
   let {
     event,
@@ -11,8 +12,9 @@
   const time = $derived(eventTimeLabel(event, day, compact));
 </script>
 
-<span
+<a
   class="chip"
+  href={eventHref(event.calendarId, event.id)}
   class:compact
   class:tentative={event.tentative}
   class:allday={event.allDay || event.multiDay}
@@ -25,6 +27,14 @@
     {#if !compact && event.location}<span class="loc">{event.location}</span>{/if}
   </span>
   <span class="marks">
+    {#if event.remind}
+      <span class="mark" title="Con aviso" role="img" aria-label="Con aviso">🔔</span>
+    {/if}
+    {#if event.hasNotes}
+      <span class="mark" title="Con notas privadas" role="img" aria-label="Con notas privadas"
+        >📝</span
+      >
+    {/if}
     {#if event.fromApp}
       <span class="mark" title="Creado en la app" role="img" aria-label="Creado en la app">★</span>
     {/if}
@@ -44,7 +54,7 @@
       >
     {/if}
   </span>
-</span>
+</a>
 {#if !compact && event.pending && event.pendingError}
   <p class="err" role="alert">
     No se pudo guardar en Google ({event.pendingError}). Se reintentara.
@@ -64,6 +74,9 @@
     font-size: 1rem;
     line-height: 1.3;
     min-width: 0;
+    min-height: 44px;
+    color: inherit;
+    text-decoration: none;
   }
   .chip.allday {
     background: var(--c);
@@ -113,6 +126,9 @@
   }
 
   .chip.compact {
+    min-height: 0;
+    position: relative;
+    z-index: 1;
     padding: 0.05rem 0.3rem;
     font-size: 0.75rem;
     border-radius: 4px;
@@ -141,6 +157,8 @@
       border: none;
       border-radius: 50%;
       background: var(--c);
+      /* En movil el punto no es objetivo tactil: el toque va a la celda (elige el dia) */
+      pointer-events: none;
     }
     .compact .body,
     .compact .marks {

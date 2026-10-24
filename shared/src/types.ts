@@ -259,6 +259,99 @@ export interface EventPending {
   error: string | null;
 }
 
+// --- Escritura de eventos en Google (T3.7) ---
+
+/** Limites de los campos de evento que se escriben en Google (los valida el Worker). */
+export const AGENDA_WRITE_LIMITS = {
+  summaryMax: 1024,
+  locationMax: 1024,
+  descriptionMax: 8192,
+  /** `client_id`: [A-Za-z0-9-], 1..64 (recomendado: crypto.randomUUID()). */
+  clientIdMax: 64,
+} as const;
+
+/**
+ * Body de `POST /api/agenda` (crea un evento NO recurrente en Google). Solo campos de Google: las
+ * notas privadas, avisos y color van aparte (`PUT .../meta`), nunca aqui (cualquier otra clave -> 400).
+ * - `allDay: true`: `start`/`end` = YYYY-MM-DD y `end` EXCLUSIVO (> start; un dia: end = start + 1).
+ * - `allDay: false`: `start`/`end` = ISO con desfase (`2026-11-02T09:00:00Z`, `...+01:00`) o hora
+ *   local de Europe/Madrid sin desfase (`2026-11-02T10:00`); `end >= start`.
+ * - `client_id`: idempotencia. Repetir el POST con el mismo `client_id` no duplica (mismo id de Google).
+ */
+export interface AgendaEventCreate {
+  client_id: string;
+  calendarId: string;
+  summary: string;
+  location?: string | null;
+  /** Descripcion PUBLICA (se guarda en Google). */
+  description?: string | null;
+  allDay: boolean;
+  start: string;
+  end: string;
+}
+
+/**
+ * Body de `PATCH /api/agenda/:calendarId/:eventId` (solo eventos no recurrentes). Parcial: ausente =
+ * no cambia; `null`/'' en location/description = vaciar. Fechas: `allDay`, `start` y `end` van JUNTOS
+ * (mismo formato que en el alta); no se puede cambiar entre dia completo y con hora (400).
+ * `confirm_external: true` obligatorio si `origin === 'google'` (si no, 428 sin llamar a Google).
+ */
+export interface AgendaEventPatch {
+  summary?: string;
+  location?: string | null;
+  description?: string | null;
+  allDay?: boolean;
+  start?: string;
+  end?: string;
+  confirm_external?: boolean;
+}
+
+/**
+ * Codigos de error de las escrituras de eventos (`{ error: { code, message } }`):
+ * - 400 `validation`; 400 `google_rejected` (Google rechazo los datos)
+ * - 403 `calendar_forbidden` (calendario sin permiso de escritura: no se llama a Google, o Google 403)
+ * - 404 `not_found` (no esta en D1, o Google ya no lo tiene al editar)
+ * - 409 `conflict` (el evento cambio en Google: el cuerpo incluye `current`, ya aplicado en D1)
+ * - 409 `write_pending` (hay una escritura sin confirmar que lo impide; reintentar/descartar)
+ * - 409 `duplicate` (`client_id` ya usado para otro evento/calendario); 410 `gone` (ese evento se borro)
+ * - 409 `google_not_connected`; 423 `frozen`; 428 `confirmation_required`
+ * - 501 `recurring_not_supported` (eventos recurrentes: T3.9); 500 `misconfigured`; 502 `google_error`
+ * Exito: 201 (creado) / 200 (POST repetido ya confirmado, o PATCH) con `EventInfo`; 204 (DELETE);
+ * 202 con `EventInfo` (`pending` != null) si Google fallo de forma transitoria y queda en cola.
+ */
+export type AgendaWriteErrorCode =
+  | 'validation'
+  | 'google_rejected'
+  | 'calendar_forbidden'
+  | 'not_found'
+  | 'conflict'
+  | 'write_pending'
+  | 'duplicate'
+  | 'gone'
+  | 'google_not_connected'
+  | 'frozen'
+  | 'confirmation_required'
+  | 'recurring_not_supported'
+  | 'misconfigured'
+  | 'google_error';
+
+/** Cuerpo del 409 `conflict`: version actual de Google (ya guardada en D1); null si no es visible. */
+export interface AgendaConflictBody {
+  error: { code: 'conflict'; message: string };
+  current: EventInfo | null;
+}
+
+/** `GET /api/settings` y respuesta de `PATCH /api/settings`. Solo D1: nunca va a Google. */
+export interface AppSettings {
+  /** Color (#rrggbb) de los eventos creados en la app; null = el del calendario. */
+  app_events_color: string | null;
+  /** Calendario preseleccionado al crear (writable y presente); null = ninguno. */
+  default_write_calendar: string | null;
+}
+
+/** Body de `PATCH /api/settings`: parcial; null borra el ajuste; otra clave -> 400. */
+export type AppSettingsPatch = Partial<AppSettings>;
+
 /** `GET /api/agenda?from=YYYY-MM-DD&to=YYYY-MM-DD` (rango inclusivo, fechas de Europe/Madrid). */
 export interface EventsResponse {
   from: string;

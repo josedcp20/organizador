@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { currentRoute, navigateTo } from './router';
+  import { currentParams, currentRoute, navigateTo } from './router';
+  import Evento from './routes/Evento.svelte';
   import { session, setReturnTo, takeReturnTo } from './lib/auth';
   import Layout from './components/Layout.svelte';
   import Login from './routes/Login.svelte';
@@ -35,6 +36,10 @@
       <Notas />
     {:else if $currentRoute === 'nota-rapida'}
       <NotaRapida />
+    {:else if $currentRoute === 'evento'}
+      {#key $currentParams.join('/')}
+        <Evento calendarId={$currentParams[0] ?? ''} eventId={$currentParams[1] ?? ''} />
+      {/key}
     {:else if $currentRoute === 'ajustes'}
       <Ajustes />
     {:else}

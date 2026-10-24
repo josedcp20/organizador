@@ -48,7 +48,23 @@ export const RATE_LIMIT_REASONS: ReadonlySet<string> = new Set([
   'rateLimitExceeded',
   'userRateLimitExceeded',
   'quotaExceeded',
+  'dailyLimitExceeded',
+  'variableTermLimitExceeded',
 ]);
+
+/**
+ * Razones de un 403 que indican falta de permiso de escritura en el CALENDARIO (y justifican
+ * bajar su rol en D1). Ausente = 403 sin motivo. `forbiddenForNonOrganizer` (evento ajeno) y las
+ * razones desconocidas NO cuentan.
+ */
+export const CALENDAR_PERMISSION_REASONS: ReadonlySet<string> = new Set([
+  'forbidden',
+  'requiredAccessLevel',
+]);
+
+export function isCalendarPermissionReason(reason: string | null | undefined): boolean {
+  return !reason || CALENDAR_PERMISSION_REASONS.has(reason);
+}
 
 /** 401, o 403 insufficientPermissions: token/permisos invalidos (se trata como desconectado). */
 export function isAuthRejection(e: unknown): boolean {

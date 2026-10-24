@@ -27,6 +27,10 @@ export interface CalEvent {
   /** Mensaje de la escritura fallida, si lo hay. */
   pendingError: string | null;
   location: string | null;
+  /** Avisar activado (valor resuelto). */
+  remind: boolean;
+  /** Tiene notas privadas no vacias (valor resuelto). */
+  hasNotes: boolean;
 }
 
 const timeFmt = new Intl.DateTimeFormat('es-ES', {
@@ -88,6 +92,8 @@ export function mapEvent(e: EventInfo): CalEvent | null {
     pending: e.pending !== null,
     pendingError: e.pending?.error ?? null,
     location: e.location,
+    remind: e.remind === true,
+    hasNotes: typeof e.notes === 'string' && e.notes.trim() !== '',
   };
 }
 

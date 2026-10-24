@@ -8,6 +8,7 @@ import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setClock } from '../src/clock';
 import { isAllowedRequest } from '../src/google/calendarApi';
+import { writeRuntime } from '../src/google/agendaWrites';
 import { importCalendars } from '../src/google/calendarList';
 import {
   eventIdFor,
@@ -225,6 +226,110 @@ describe('T2.9 ejecucion: ningun dato privado sale hacia Google', () => {
       for (const x of SENTINEL_STRINGS) expect(s.toLowerCase()).not.toContain(x.toLowerCase());
       for (const k of FORBIDDEN_KEYS) expect(s).not.toContain(`"${k}"`);
     }
+  });
+
+  it('POST/PATCH/DELETE /api/agenda (T3.7) con meta centinela: nada privado llega a Google', async () => {
+    writeRuntime.retry = { sleep: async () => {} };
+    try {
+      const id = await eventIdFor(LOCAL);
+      await seedPrivateData(id);
+      // Evento de Google con meta privada de instancia y de serie (centinelas).
+      await env.DB.prepare(
+        `INSERT INTO events (calendar_id, id, status, summary, all_day, start_at, end_at, etag, updated, origin)
+         VALUES (?1, 'g1', 'confirmed', 'De Google', 0, '2026-11-12T09:00:00.000Z', '2026-11-12T10:00:00.000Z', '"100"', '2026-10-01T00:00:00.000Z', 'google')`,
+      )
+        .bind(CAL)
+        .run();
+      google.put(CAL, {
+        id: 'g1',
+        status: 'confirmed',
+        etag: '"100"',
+        summary: 'De Google',
+        start: { dateTime: '2026-11-12T09:00:00Z' },
+        end: { dateTime: '2026-11-12T10:00:00Z' },
+      });
+      await env.DB.prepare(
+        `INSERT INTO event_meta (calendar_id, scope, target_id, notes, remind, remind_days_before, color, updated_at)
+         VALUES (?1, 'instance', 'g1', ?2, 1, ?3, ?4, '2026-10-20T00:00:00.000Z')`,
+      )
+        .bind(CAL, S.note, REMIND_DAYS, S.eventColor)
+        .run();
+
+      const send = (method: string, path: string, body?: unknown) =>
+        call(path, {
+          method,
+          ip: '203.0.113.80',
+          env: OAUTH_ENV,
+          headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      const p = (e: string, q = '') => `/api/agenda/${encodeURIComponent(CAL)}/${e}${q}`;
+      const base = {
+        client_id: LOCAL,
+        calendarId: CAL,
+        summary: 'Cita',
+        description: 'Descripcion publica',
+        allDay: false,
+        start: '2026-11-10T09:00:00Z',
+        end: '2026-11-10T10:00:00Z',
+      };
+      // Colar meta privada en el alta/edicion se rechaza (400) sin red.
+      expect((await send('POST', '/api/agenda', { ...base, notes: S.note })).status).toBe(400);
+      expect((await send('PATCH', p(id), { color: S.eventColor })).status).toBe(400);
+      expect(google.calendarRequests()).toHaveLength(0);
+
+      expect((await send('POST', '/api/agenda', base)).status).toBe(201);
+      expect((await send('POST', '/api/agenda', base)).status).toBe(200);
+      expect((await send('PATCH', p(id), { summary: 'Cita 2', location: 'Sala' })).status).toBe(
+        200,
+      );
+      // Patch de un evento de Google (confirmado) + conflicto 412 -> getEvent.
+      expect((await send('PATCH', p('g1'), { summary: 'G2', confirm_external: true })).status).toBe(
+        200,
+      );
+      google.put(CAL, { ...google.store.get(`${CAL}/g1`)!, etag: '"999"' });
+      expect((await send('PATCH', p('g1'), { summary: 'G3', confirm_external: true })).status).toBe(
+        409,
+      );
+      // Transitorio -> pendiente (payload en D1 sin meta).
+      google.queue.push(new Error('net'), new Error('net'), new Error('net'));
+      expect((await send('PATCH', p(id), { description: 'Otra publica' })).status).toBe(202);
+      const pend = await env.DB.prepare('SELECT pending_payload FROM events WHERE id = ?1')
+        .bind(id)
+        .first<{ pending_payload: string }>();
+      for (const s of SENTINEL_STRINGS) {
+        expect(pend!.pending_payload.toLowerCase()).not.toContain(s.toLowerCase());
+      }
+      expect((await send('DELETE', p('g1', '?confirm_external=true'))).status).toBe(204);
+      expect((await send('PATCH', p(id), { summary: 'Cita 3' })).status).toBe(200);
+      expect((await send('DELETE', p(id))).status).toBe(204);
+
+      assertNoLeak();
+      assertWriteBodies(LOCAL);
+      // Meta de serie intacta; la de instancia de los borrados, eliminada.
+      const meta = await env.DB.prepare('SELECT scope, target_id FROM event_meta').all();
+      expect(meta.results).toEqual([{ scope: 'series', target_id: 'serie1' }]);
+    } finally {
+      writeRuntime.retry = undefined;
+    }
+  });
+
+  it('GET/PATCH /api/settings no emiten ninguna peticion a Google', async () => {
+    const send = (method: string, body?: unknown) =>
+      call('/api/settings', {
+        method,
+        ip: '203.0.113.81',
+        env: OAUTH_ENV,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    expect(
+      (await send('PATCH', { app_events_color: S.settingColor, default_write_calendar: CAL }))
+        .status,
+    ).toBe(200);
+    expect((await send('PATCH', { app_events_color: null })).status).toBe(200);
+    expect((await send('GET')).status).toBe(200);
+    expect(google.requests).toHaveLength(0);
   });
 
   it('PATCH /api/calendars (color propio) no emite ninguna peticion a Google', async () => {

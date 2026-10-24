@@ -48,6 +48,14 @@ export interface ReadOptions {
   tz?: string;
 }
 
+export interface GetOptions extends ReadOptions {
+  /**
+   * Respuestas de las escrituras (T3.7): incluye calendarios ocultos y filas con un borrado
+   * pendiente (para devolver el `EventInfo` con `pending.op = 'delete'`).
+   */
+  forWrite?: boolean;
+}
+
 const SELECT_BASE = `SELECT e.id, e.calendar_id, e.status, e.summary, e.location, e.description,
               e.all_day, e.start_at, e.end_at, e.start_date, e.end_date, e.recurring_event_id,
               e.html_link, e.origin, e.pending_op, e.write_error, c.access_role,
@@ -66,9 +74,10 @@ const SELECT_BASE = `SELECT e.id, e.calendar_id, e.status, e.summary, e.location
        LEFT JOIN event_meta ms
          ON ms.calendar_id = e.calendar_id AND ms.scope = 'series'
         AND ms.target_id = e.recurring_event_id
-       WHERE c.enabled = 1 AND c.removed_at IS NULL
-         AND e.status != 'cancelled'
-         AND (e.pending_op IS NULL OR e.pending_op != 'delete')`;
+       WHERE c.removed_at IS NULL AND e.status != 'cancelled'`;
+
+/** Lectura normal: solo calendarios visibles y sin los borrados pendientes de confirmar. */
+const VISIBLE = ` AND c.enabled = 1 AND (e.pending_op IS NULL OR e.pending_op != 'delete')`;
 
 /**
  * Eventos de D1 que solapan con [from, to] (fechas YYYY-MM-DD de Europe/Madrid, ambas inclusivas).
@@ -90,7 +99,7 @@ export async function listEventsInRange(
   // ORDER BY determinista ANTES del LIMIT: si se llegara al tope, el recorte es estable.
   const { results } = await db
     .prepare(
-      `${SELECT_BASE}
+      `${SELECT_BASE}${VISIBLE}
          AND (
            (e.all_day = 0 AND e.start_at < ?2
              AND (e.end_at > ?1 OR e.start_at >= ?1))
@@ -122,10 +131,11 @@ export async function getEventById(
   db: D1Database,
   calendarId: string,
   eventId: string,
-  opts: ReadOptions = {},
+  opts: GetOptions = {},
 ): Promise<EventInfo | null> {
+  const filter = opts.forWrite ? '' : VISIBLE;
   const row = await db
-    .prepare(`${SELECT_BASE} AND e.calendar_id = ?1 AND e.id = ?2`)
+    .prepare(`${SELECT_BASE}${filter} AND e.calendar_id = ?1 AND e.id = ?2`)
     .bind(calendarId, eventId)
     .first<EventRow>();
   return row ? toInfo(row, windowFor(opts)) : null;

@@ -8,6 +8,10 @@ export function fetchToday(): Promise<TodayResponse> {
 
 export interface EventRow {
   id: string;
+  calendarId: string;
+  eventId: string;
+  remind: boolean;
+  hasNotes: boolean;
   time: string;
   title: string;
   location: string | null;
@@ -53,6 +57,10 @@ export function formatEventTime(e: EventInfo, day?: string): string {
 export function toRow(e: EventInfo, day?: string): EventRow {
   return {
     id: `${e.calendarId}/${e.id}`,
+    calendarId: e.calendarId,
+    eventId: e.id,
+    remind: e.remind === true,
+    hasNotes: typeof e.notes === 'string' && e.notes.trim() !== '',
     time: formatEventTime(e, day),
     title: e.summary?.trim() || '(Sin título)',
     location: e.location?.trim() || null,
