@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { apiFetch, ApiError } from '../lib/api';
-  import { setToken, meInfo } from '../lib/auth';
+  import { setToken, meInfo, takeReturnTo } from '../lib/auth';
   import { getQueryParams, navigateTo } from '../router';
 
   let tokenInput = $state('');
@@ -32,7 +32,7 @@
       setToken(token);
       meInfo.set({ version: String(me.version), tz: String(me.tz) });
       tokenInput = '';
-      navigateTo('hoy');
+      navigateTo(takeReturnTo() === 'nota-rapida' ? 'nota-rapida' : 'hoy');
     } catch (e) {
       error = messageFor(e);
     } finally {

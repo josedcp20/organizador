@@ -1,5 +1,6 @@
 import type { Env } from '../env';
 import { DEFAULT_MAX_REQUESTS, runSync } from '../sync/engine';
+import { runCleanup } from './cleanup';
 
 /**
  * Despachador del cron `*\/10 * * * *` (T2.5, D4). Un solo trigger que ejecuta en orden:
@@ -49,9 +50,9 @@ async function syncStep(ctx: StepContext): Promise<void> {
   if (r.status !== 'ok' && r.status !== 'busy') console.log('cron', 'sync_skipped', r.status);
 }
 
-/** HOOK T3.3 (pendiente): limpieza (notas caducadas, purgeAuthFailures). */
-async function cleanupStep(): Promise<void> {
-  // TODO(T3.3)
+/** Limpieza (T3.3): notas caducadas + purgeAuthFailures. */
+async function cleanupStep(ctx: StepContext): Promise<void> {
+  await runCleanup(ctx.env.DB, ctx.nowMs);
 }
 
 export const DEFAULT_STEPS: readonly ScheduledStep[] = [

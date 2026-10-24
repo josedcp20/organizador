@@ -126,3 +126,43 @@ export function addMonthsToDateStr(dateStr: string, months: number): string {
 export function startOfDateInTz(dateStr: string, tz: string = TZ): Date {
   return new Date(startOfLocalDateMs(dateStr, tz));
 }
+
+/** Caducidad de una nota (T3.1). `days` es un entero 1..365. */
+export type ExpirySpec = { type: 'today' } | { type: 'days'; days: number } | { type: 'forever' };
+
+export const MIN_EXPIRY_DAYS = 1;
+export const MAX_EXPIRY_DAYS = 365;
+
+/** `true` si `days` es un entero valido para `{ type: 'days' }` (1..365). */
+export function isValidExpiryDays(days: unknown): days is number {
+  return (
+    typeof days === 'number' &&
+    Number.isInteger(days) &&
+    days >= MIN_EXPIRY_DAYS &&
+    days <= MAX_EXPIRY_DAYS
+  );
+}
+
+/**
+ * Instante de caducidad (ISO-8601 UTC) de una nota creada en `now`, o `null` si no caduca.
+ * - `today`: 00:00 locales del dia siguiente al de creacion (una nota de las 23:50 caduca 10 min despues).
+ * - `days` N: 00:00 locales del dia creacion + N (dias de calendario, correcto en cambios de hora).
+ * - `forever`: sin caducidad.
+ * Lanza RangeError si `days` no es un entero 1..365.
+ */
+export function computeExpiresAt(spec: ExpirySpec, now: Date, tz: string = TZ): string | null {
+  if (spec.type === 'forever') return null;
+  let days = 1;
+  if (spec.type === 'days') {
+    if (!isValidExpiryDays(spec.days)) throw new RangeError('days must be an integer 1..365');
+    days = spec.days;
+  }
+  return addDaysInTz(now, days, tz).toISOString();
+}
+
+/** Una nota con `expiresAt` caduca exactamente en ese instante (`expiresAt <= now`). `null` = nunca. */
+export function isExpired(expiresAt: string | null | undefined, nowMs: number): boolean {
+  if (expiresAt == null) return false;
+  const t = Date.parse(expiresAt);
+  return Number.isFinite(t) && t <= nowMs;
+}

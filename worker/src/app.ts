@@ -7,7 +7,9 @@ import { cors } from './middleware/cors';
 import { calendars } from './routes/calendars';
 import { agenda } from './routes/agenda';
 import { me } from './routes/me';
+import { notes } from './routes/notes';
 import { oauth } from './routes/oauth';
+import { quickNotes } from './routes/quickNotes';
 import { sync } from './routes/sync';
 import { getVersion } from './version';
 
@@ -23,6 +25,8 @@ app.route('/', oauth);
 app.route('/', calendars);
 app.route('/', agenda);
 app.route('/', sync);
+app.route('/', notes);
+app.route('/', quickNotes);
 
 app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 

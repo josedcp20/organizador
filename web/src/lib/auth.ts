@@ -3,6 +3,43 @@ import { writable } from 'svelte/store';
 /** Clave de localStorage del token de acceso (seccion 5 del plan). */
 export const TOKEN_KEY = 'organizador_token';
 
+/** Prefijo de las claves de localStorage con datos cacheados; se borran al cerrar sesion. */
+export const CACHE_PREFIX = 'organizador_cache:';
+
+/** Ruta a la que volver tras iniciar sesion (solo se guarda para la nota rapida). */
+const RETURN_KEY = 'organizador_return';
+
+export function setReturnTo(route: string): void {
+  try {
+    window.sessionStorage.setItem(RETURN_KEY, route);
+  } catch {
+    // ignorar
+  }
+}
+
+/** Devuelve y borra la ruta de retorno guardada. */
+export function takeReturnTo(): string | null {
+  try {
+    const r = window.sessionStorage.getItem(RETURN_KEY);
+    window.sessionStorage.removeItem(RETURN_KEY);
+    return r;
+  } catch {
+    return null;
+  }
+}
+
+function clearCachedData(): void {
+  try {
+    const ls = window.localStorage;
+    for (let i = ls.length - 1; i >= 0; i--) {
+      const k = ls.key(i);
+      if (k && k.startsWith(CACHE_PREFIX)) ls.removeItem(k);
+    }
+  } catch {
+    // ignorar
+  }
+}
+
 export interface MeInfo {
   version: string;
   tz: string;
@@ -48,6 +85,7 @@ export function clearToken(): void {
   } catch {
     // ignorar
   }
+  clearCachedData();
   meInfo.set(null);
   session.set(false);
 }

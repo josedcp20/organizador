@@ -1,6 +1,6 @@
 <script lang="ts">
   import { currentRoute, navigateTo } from './router';
-  import { session } from './lib/auth';
+  import { session, setReturnTo, takeReturnTo } from './lib/auth';
   import Layout from './components/Layout.svelte';
   import Login from './routes/Login.svelte';
   import Hoy from './routes/Hoy.svelte';
@@ -11,7 +11,17 @@
 
   // Guard: sin token solo se ve login y no se monta ninguna vista con datos.
   $effect(() => {
-    if (!$session && $currentRoute !== 'login') navigateTo('login');
+    if (!$session) {
+      if ($currentRoute !== 'login') {
+        // El atajo de nota rapida vuelve a ella tras el login; cualquier otra ruta no deja retorno.
+        if ($currentRoute === 'nota-rapida') setReturnTo('nota-rapida');
+        else takeReturnTo();
+        navigateTo('login');
+      }
+    } else if ($currentRoute !== 'login') {
+      // Autenticado y fuera de login: una ruta de retorno pendiente ya no aplica.
+      takeReturnTo();
+    }
   });
 </script>
 

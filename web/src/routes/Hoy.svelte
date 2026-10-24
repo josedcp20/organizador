@@ -64,9 +64,12 @@
 <div class="container">
   <div class="head">
     <h1>{title}</h1>
-    <button type="button" disabled={loading} onclick={() => load()}>
-      {loading ? 'Actualizando...' : 'Actualizar'}
-    </button>
+    <div class="head-actions">
+      <a class="quick" href="#/nota-rapida">Nota rápida</a>
+      <button type="button" disabled={loading} onclick={() => load()}>
+        {loading ? 'Actualizando...' : 'Actualizar'}
+      </button>
+    </div>
   </div>
 
   {#if googleDown}
@@ -136,6 +139,23 @@
     justify-content: space-between;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .head-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  a.quick {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1rem;
+    border-radius: 4px;
+    background: #188038;
+    color: #fff;
+    text-decoration: none;
   }
 
   h1 {

@@ -8,6 +8,9 @@ import {
   addDaysToDateStr,
   addMonthsToDateStr,
   startOfDateInTz,
+  computeExpiresAt,
+  isExpired,
+  isValidExpiryDays,
 } from './time';
 
 const MAD = 'Europe/Madrid';
@@ -170,5 +173,137 @@ describe('startOfDateInTz', () => {
     expect(startOfDateInTz('2026-10-25', 'Europe/Madrid').toISOString()).toBe(
       '2026-10-24T22:00:00.000Z',
     );
+  });
+});
+
+describe('caducidad de notas (T3.1)', () => {
+  const at = (s: string) => new Date(s);
+
+  it('forever no caduca', () => {
+    expect(computeExpiresAt({ type: 'forever' }, at('2026-10-21T10:00:00Z'))).toBeNull();
+  });
+
+  it('today a las 10:00 caduca a las 00:00 locales del dia siguiente (verano)', () => {
+    expect(computeExpiresAt({ type: 'today' }, at('2026-07-15T08:00:00Z'))).toBe(
+      '2026-07-15T22:00:00.000Z',
+    );
+  });
+
+  it('today a las 23:50 locales caduca 10 minutos despues', () => {
+    // 23:50 Madrid (CEST, UTC+2) = 21:50Z
+    expect(computeExpiresAt({ type: 'today' }, at('2026-07-15T21:50:00Z'))).toBe(
+      '2026-07-15T22:00:00.000Z',
+    );
+  });
+
+  it('today justo a las 00:00 local caduca 24 h despues, no inmediatamente', () => {
+    expect(computeExpiresAt({ type: 'today' }, at('2026-07-15T22:00:00Z'))).toBe(
+      '2026-07-16T22:00:00.000Z',
+    );
+  });
+
+  it('today a las 00:30 locales (aun dia UTC anterior) usa el dia local', () => {
+    expect(computeExpiresAt({ type: 'today' }, at('2026-01-10T23:30:00Z'))).toBe(
+      '2026-01-11T23:00:00.000Z',
+    );
+  });
+
+  it('days 1 equivale a today; days 3 caduca a las 00:00 locales de creacion+3', () => {
+    const n = at('2026-01-10T12:00:00Z');
+    expect(computeExpiresAt({ type: 'days', days: 1 }, n)).toBe(
+      computeExpiresAt({ type: 'today' }, n),
+    );
+    expect(computeExpiresAt({ type: 'days', days: 3 }, n)).toBe('2026-01-12T23:00:00.000Z');
+  });
+
+  it('cambio de hora de primavera 2026-03-29 (dia de 23 h)', () => {
+    // today el 28 -> 00:00 del 29 (CET, +1) = 28T23:00Z
+    expect(computeExpiresAt({ type: 'today' }, at('2026-03-28T12:00:00Z'))).toBe(
+      '2026-03-28T23:00:00.000Z',
+    );
+    // today el 29 (dia de 23 h) -> 00:00 del 30 (CEST, +2) = 29T22:00Z
+    expect(computeExpiresAt({ type: 'today' }, at('2026-03-29T10:00:00Z'))).toBe(
+      '2026-03-29T22:00:00.000Z',
+    );
+    // days 2 desde el 28 cruza el cambio: 00:00 del 30 = 29T22:00Z (no 29T23:00Z)
+    expect(computeExpiresAt({ type: 'days', days: 2 }, at('2026-03-28T12:00:00Z'))).toBe(
+      '2026-03-29T22:00:00.000Z',
+    );
+    // days 7 desde el 25 (CET) -> 00:00 del 1-abr (CEST)
+    expect(computeExpiresAt({ type: 'days', days: 7 }, at('2026-03-25T12:00:00Z'))).toBe(
+      '2026-03-31T22:00:00.000Z',
+    );
+  });
+
+  it('cambio de hora de otono 2026-10-25 (dia de 25 h)', () => {
+    // today el 24 (CEST) -> 00:00 del 25 (aun CEST, +2) = 24T22:00Z
+    expect(computeExpiresAt({ type: 'today' }, at('2026-10-24T12:00:00Z'))).toBe(
+      '2026-10-24T22:00:00.000Z',
+    );
+    // today el 25 (dia de 25 h) -> 00:00 del 26 (CET, +1) = 25T23:00Z
+    expect(computeExpiresAt({ type: 'today' }, at('2026-10-25T10:00:00Z'))).toBe(
+      '2026-10-25T23:00:00.000Z',
+    );
+    // nota creada en la hora repetida (02:30 CET = 01:30Z) tambien caduca el 25T23:00Z
+    expect(computeExpiresAt({ type: 'today' }, at('2026-10-25T01:30:00Z'))).toBe(
+      '2026-10-25T23:00:00.000Z',
+    );
+    // days 2 desde el 24 -> 00:00 del 26 = 25T23:00Z
+    expect(computeExpiresAt({ type: 'days', days: 2 }, at('2026-10-24T12:00:00Z'))).toBe(
+      '2026-10-25T23:00:00.000Z',
+    );
+  });
+
+  it('days 365 y cambio de anio', () => {
+    expect(computeExpiresAt({ type: 'days', days: 365 }, at('2026-01-10T12:00:00Z'))).toBe(
+      '2027-01-09T23:00:00.000Z',
+    );
+    expect(computeExpiresAt({ type: 'today' }, at('2026-12-31T20:00:00Z'))).toBe(
+      '2026-12-31T23:00:00.000Z',
+    );
+  });
+
+  it('respeta la zona indicada', () => {
+    expect(computeExpiresAt({ type: 'today' }, at('2026-07-15T10:00:00Z'), 'Asia/Tokyo')).toBe(
+      '2026-07-15T15:00:00.000Z',
+    );
+  });
+
+  it('rechaza days fuera de 1..365 o no entero', () => {
+    for (const days of [0, -1, 366, 1.5, NaN, Infinity]) {
+      expect(() => computeExpiresAt({ type: 'days', days }, at('2026-01-10T12:00:00Z'))).toThrow(
+        RangeError,
+      );
+    }
+    expect(isValidExpiryDays(1)).toBe(true);
+    expect(isValidExpiryDays(365)).toBe(true);
+    expect(isValidExpiryDays('3')).toBe(false);
+    expect(isValidExpiryDays(0)).toBe(false);
+  });
+
+  it('isExpired: frontera exacta, null y fechas invalidas', () => {
+    const exp = '2026-07-15T22:00:00.000Z';
+    const ms = Date.parse(exp);
+    expect(isExpired(exp, ms - 1)).toBe(false);
+    expect(isExpired(exp, ms)).toBe(true);
+    expect(isExpired(exp, ms + 1)).toBe(true);
+    expect(isExpired(null, ms)).toBe(false);
+    expect(isExpired(undefined, ms)).toBe(false);
+    expect(isExpired('basura', ms)).toBe(false);
+  });
+
+  it('es independiente de la TZ del proceso', () => {
+    const prev = process.env.TZ;
+    try {
+      for (const tz of ['UTC', 'Asia/Tokyo', 'America/Los_Angeles']) {
+        process.env.TZ = tz;
+        expect(computeExpiresAt({ type: 'today' }, at('2026-03-29T10:00:00Z'))).toBe(
+          '2026-03-29T22:00:00.000Z',
+        );
+      }
+    } finally {
+      if (prev === undefined) delete process.env.TZ;
+      else process.env.TZ = prev;
+    }
   });
 });

@@ -1,11 +1,11 @@
 import { CALENDAR_PALETTE, addDaysToDateStr, startOfDateInTz } from '@organizador/shared';
 import type { EventInfo } from '@organizador/shared';
 import { now } from '../clock';
+import { metaValuesFromRow, resolveMeta } from './eventMeta';
 import { DEFAULT_TZ, syncWindow } from '../sync/window';
 
 /** Tope defensivo de filas por consulta (un rango de 400 dias no se acerca a esto). */
 const MAX_ROWS = 3000;
-const DEFAULT_REMIND_DAYS = 5;
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 interface EventRow {
@@ -29,10 +29,16 @@ interface EventRow {
   cal_color: string | null;
   cal_google_color: string | null;
   app_color: string | null;
-  meta_color: string | null;
-  meta_notes: string | null;
-  meta_remind: number | null;
-  meta_remind_days: number | null;
+  mi_present: number | null;
+  mi_notes: string | null;
+  mi_remind: number | null;
+  mi_days: number | null;
+  mi_color: string | null;
+  ms_present: number | null;
+  ms_notes: string | null;
+  ms_remind: number | null;
+  ms_days: number | null;
+  ms_color: string | null;
 }
 
 export interface ReadOptions {
@@ -47,10 +53,12 @@ const SELECT_BASE = `SELECT e.id, e.calendar_id, e.status, e.summary, e.location
               e.html_link, e.origin, e.pending_op, e.write_error, c.access_role,
               c.color AS cal_color, c.google_color AS cal_google_color,
               (SELECT s.value FROM settings s WHERE s.key = 'app_events_color') AS app_color,
-              COALESCE(mi.color, ms.color) AS meta_color,
-              COALESCE(mi.notes, ms.notes) AS meta_notes,
-              COALESCE(mi.remind, ms.remind) AS meta_remind,
-              COALESCE(mi.remind_days_before, ms.remind_days_before) AS meta_remind_days
+              CASE WHEN mi.target_id IS NULL THEN NULL ELSE 1 END AS mi_present,
+              mi.notes AS mi_notes, mi.remind AS mi_remind,
+              mi.remind_days_before AS mi_days, mi.color AS mi_color,
+              CASE WHEN ms.target_id IS NULL THEN NULL ELSE 1 END AS ms_present,
+              ms.notes AS ms_notes, ms.remind AS ms_remind,
+              ms.remind_days_before AS ms_days, ms.color AS ms_color
        FROM events e
        JOIN calendars c ON c.id = e.calendar_id
        LEFT JOIN event_meta mi
@@ -143,18 +151,33 @@ function isFrozen(r: EventRow, w: FrozenWindow): boolean {
   return r.all_day === 1 ? (r.start_date ?? '') < w.startDate : (r.start_at ?? '') < w.timeMin;
 }
 
-function effectiveColor(r: EventRow): string {
+function effectiveColor(r: EventRow, metaColor: string | null): string {
   const app = r.app_color && HEX_COLOR.test(r.app_color) ? r.app_color : null;
   const base = r.origin === 'app' ? (app ?? r.cal_color) : r.cal_color;
-  return r.meta_color ?? base ?? r.cal_google_color ?? CALENDAR_PALETTE[0];
+  return metaColor ?? base ?? r.cal_google_color ?? CALENDAR_PALETTE[0];
 }
 
 function toInfo(r: EventRow, w: FrozenWindow): EventInfo {
   const op = r.pending_op;
+  const instance = metaValuesFromRow({
+    present: r.mi_present,
+    notes: r.mi_notes,
+    remind: r.mi_remind,
+    remind_days_before: r.mi_days,
+    color: r.mi_color,
+  });
+  const series = metaValuesFromRow({
+    present: r.ms_present,
+    notes: r.ms_notes,
+    remind: r.ms_remind,
+    remind_days_before: r.ms_days,
+    color: r.ms_color,
+  });
+  const meta = resolveMeta(instance, series);
   return {
     id: r.id,
     calendarId: r.calendar_id,
-    color: effectiveColor(r),
+    color: effectiveColor(r, meta.color),
     status: r.status === 'tentative' ? 'tentative' : 'confirmed',
     summary: r.summary,
     location: r.location,
@@ -167,12 +190,13 @@ function toInfo(r: EventRow, w: FrozenWindow): EventInfo {
     recurringEventId: r.recurring_event_id,
     htmlLink: r.html_link,
     origin: r.origin === 'app' ? 'app' : 'google',
-    notes: r.meta_notes ?? '',
-    remind: r.meta_remind === 1,
-    remindDaysBefore: r.meta_remind_days ?? DEFAULT_REMIND_DAYS,
+    notes: meta.notes,
+    remind: meta.remind,
+    remindDaysBefore: meta.remindDaysBefore,
     writable: r.access_role === 'owner' || r.access_role === 'writer',
     frozen: isFrozen(r, w),
     pending:
       op === 'insert' || op === 'patch' || op === 'delete' ? { op, error: r.write_error } : null,
+    metaScopes: { instance, series },
   };
 }

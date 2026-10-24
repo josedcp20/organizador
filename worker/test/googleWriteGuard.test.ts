@@ -238,6 +238,79 @@ describe('T2.9 ejecucion: ningun dato privado sale hacia Google', () => {
     expect(res.status).toBe(200);
     expect(google.requests).toHaveLength(0);
   });
+
+  it('PUT/DELETE /api/agenda/.../meta (instancia y serie) no emiten ninguna peticion a Google', async () => {
+    await env.DB.prepare(
+      `INSERT INTO events (calendar_id, id, status, summary, all_day, start_at, end_at, recurring_event_id, origin)
+       VALUES (?1, 'inst1', 'confirmed', 'Serie', 0, '2026-11-10T09:00:00.000Z', '2026-11-10T10:00:00.000Z', 'serie1', 'google')`,
+    )
+      .bind(CAL)
+      .run();
+    const url = `/api/agenda/${encodeURIComponent(CAL)}/inst1/meta`;
+    const send = (method: string, body?: unknown, q = '') =>
+      call(`${url}${q}`, {
+        method,
+        ip: '203.0.113.78',
+        env: OAUTH_ENV,
+        headers: { 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    for (const scope of ['instance', 'series'] as const) {
+      const res = await send('PUT', {
+        scope,
+        notes: scope === 'series' ? S.seriesNote : S.note,
+        remind: true,
+        remind_days_before: REMIND_DAYS,
+        color: S.eventColor,
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ remindDaysBefore: REMIND_DAYS, notes: S.note });
+    }
+    // Intentar colar campos de Google (description) junto a la meta se rechaza.
+    expect((await send('PUT', { scope: 'instance', description: S.detail })).status).toBe(400);
+    for (const scope of ['instance', 'series']) {
+      expect((await send('DELETE', undefined, `?scope=${scope}`)).status).toBe(200);
+    }
+    expect(google.requests).toHaveLength(0);
+    const ev = await env.DB.prepare(`SELECT description FROM events WHERE id = 'inst1'`).first();
+    expect(ev).toEqual({ description: null });
+  });
+
+  it('/api/notes y /api/quick-notes (POST/PATCH/DELETE y listados) no emiten peticiones a Google', async () => {
+    const send = (path: string, method: string, body?: string, ctype?: string) =>
+      call(path, {
+        method,
+        ip: '203.0.113.79',
+        env: OAUTH_ENV,
+        headers: ctype ? { 'Content-Type': ctype } : {},
+        body,
+      });
+    const json = 'application/json';
+    const created = await send(
+      '/api/notes',
+      'POST',
+      JSON.stringify({ title: S.noteTitle, body: S.note }),
+      json,
+    );
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    expect(
+      (await send(`/api/notes/${id}`, 'PATCH', JSON.stringify({ body: S.detail }), json)).status,
+    ).toBe(200);
+
+    const qj = await send('/api/quick-notes', 'POST', JSON.stringify({ body: S.quick }), json);
+    expect(qj.status).toBe(201);
+    const qt = await send('/api/quick-notes', 'POST', S.quick, 'text/plain');
+    expect(qt.status).toBe(201);
+    const qid = ((await qj.json()) as { id: string }).id;
+
+    expect((await send('/api/notes', 'GET')).status).toBe(200);
+    expect((await send('/api/quick-notes', 'GET')).status).toBe(200);
+    expect((await send(`/api/quick-notes/${qid}`, 'DELETE')).status).toBe(204);
+    expect((await send(`/api/notes/${id}`, 'DELETE')).status).toBe(204);
+
+    expect(google.requests.length).toBe(0);
+  });
 });
 
 describe('T2.9 estatico: una sola puerta de salida', () => {

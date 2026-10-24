@@ -1,17 +1,25 @@
 import {
   addDaysToDateStr,
   formatDateInTz,
+  type EventMetaScope,
   type EventsResponse,
   type TodayResponse,
 } from '@organizador/shared';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { now } from '../clock';
+import {
+  deleteEventMeta,
+  isMetaScope,
+  parseMetaInput,
+  upsertEventMeta,
+  type MetaKey,
+} from '../db/eventMeta';
 import { getEventById, listEventsInRange } from '../db/eventsRead';
 import type { Env } from '../env';
 import { errorBody } from '../errors';
 import { DEFAULT_TZ } from '../sync/window';
 
-/** Lectura de eventos SOLO desde D1 (protegido por el middleware Bearer de /api/*). */
+/** Lectura de eventos y datos privados (event_meta) SOLO desde/en D1 (protegido por el middleware Bearer de /api/*). */
 export const agenda = new Hono<{ Bindings: Env }>();
 
 /** Rango maximo (dias, ambos extremos incluidos). */
@@ -63,6 +71,55 @@ agenda.get('/api/agenda/:calendarId/:eventId', async (c) => {
   c.header('Cache-Control', NO_STORE);
   return c.json(event);
 });
+
+/**
+ * Datos privados del evento (T3.6): notas, avisar, dias de antelacion, color. SOLO D1, nunca
+ * Google. `scope='series'` usa recurring_event_id y solo vale para eventos recurrentes.
+ */
+agenda.put('/api/agenda/:calendarId/:eventId/meta', async (c) => {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json(errorBody('validation', 'Body must be JSON'), 400);
+  }
+  const input = parseMetaInput(raw);
+  if (!input.ok) return c.json(errorBody('validation', input.message), 400);
+  return withMetaTarget(c, input.scope, (key) => upsertEventMeta(c.env.DB, key, input.patch));
+});
+
+agenda.delete('/api/agenda/:calendarId/:eventId/meta', async (c) => {
+  const scope = c.req.query('scope');
+  if (!isMetaScope(scope)) {
+    return c.json(errorBody('validation', "scope must be 'instance' or 'series'"), 400);
+  }
+  return withMetaTarget(c, scope, (key) => deleteEventMeta(c.env.DB, key));
+});
+
+/** Resuelve el evento (404), la clave del ambito (400 si `series` sin serie), aplica y relee. */
+async function withMetaTarget(
+  c: Context<{ Bindings: Env }>,
+  scope: EventMetaScope,
+  apply: (key: MetaKey) => Promise<unknown>,
+) {
+  const calendarId = c.req.param('calendarId')!;
+  const eventId = c.req.param('eventId')!;
+  const opts = { tz: tzOf(c.env) };
+  const event = await getEventById(c.env.DB, calendarId, eventId, opts);
+  if (!event) return c.json(errorBody('not_found', 'Event not found'), 404);
+  let targetId = event.id;
+  if (scope === 'series') {
+    if (!event.recurringEventId) {
+      return c.json(errorBody('validation', 'scope series requires a recurring event'), 400);
+    }
+    targetId = event.recurringEventId;
+  }
+  await apply({ calendarId, scope, targetId });
+  const updated = await getEventById(c.env.DB, calendarId, eventId, opts);
+  if (!updated) return c.json(errorBody('not_found', 'Event not found'), 404);
+  c.header('Cache-Control', NO_STORE);
+  return c.json(updated);
+}
 
 agenda.get('/api/today', async (c) => {
   const tz = tzOf(c.env);

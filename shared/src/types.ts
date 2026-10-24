@@ -205,6 +205,53 @@ export interface EventInfo {
   frozen: boolean;
   /** Escritura a Google sin confirmar (con el ultimo error, si lo hubo); null si esta sincronizado. */
   pending: EventPending | null;
+  /**
+   * Valores guardados en cada ambito (sin resolver), para que la UI sepa que esta personalizado en
+   * la instancia y que hereda de la serie. null = no hay fila en ese ambito. El Worker siempre lo
+   * rellena; es opcional solo para no obligar a los mocks de la UI.
+   */
+  metaScopes?: EventMetaScopes;
+}
+
+/** Ambito de los datos privados de un evento: la instancia concreta o toda la serie recurrente. */
+export type EventMetaScope = 'instance' | 'series';
+
+/** Valores de un ambito de `event_meta`. null = no definido en ese ambito (hereda). Nunca van a Google. */
+export interface EventMetaValues {
+  notes: string | null;
+  remind: boolean | null;
+  remindDaysBefore: number | null;
+  /** #rrggbb */
+  color: string | null;
+}
+
+export interface EventMetaScopes {
+  instance: EventMetaValues | null;
+  /** Siempre null en eventos no recurrentes. */
+  series: EventMetaValues | null;
+}
+
+/** Limites de los datos privados de evento (validados en el Worker; la UI puede reutilizarlos). */
+export const EVENT_META_LIMITS = {
+  notesMaxLength: 10_000,
+  remindDaysMin: 1,
+  remindDaysMax: 60,
+  remindDaysDefault: 5,
+} as const;
+
+/**
+ * Body de `PUT /api/agenda/:calendarId/:eventId/meta`. Parcial: un campo ausente no cambia; un campo
+ * a null deja de estar definido en ese ambito (vuelve a heredar). `scope='series'` solo en eventos
+ * recurrentes. Responde con el `EventInfo` resuelto. Solo D1: nunca se envia a Google.
+ */
+export interface EventMetaInput {
+  scope: EventMetaScope;
+  notes?: string | null;
+  remind?: boolean | null;
+  /** Entero 1..60. */
+  remind_days_before?: number | null;
+  /** #rrggbb */
+  color?: string | null;
 }
 
 export interface EventPending {
@@ -225,4 +272,65 @@ export interface TodayResponse {
   tomorrow: string;
   todayEvents: EventInfo[];
   tomorrowEvents: EventInfo[];
+}
+
+// --- Notas y notas rapidas (T3.2) ---
+
+/** Longitud maxima del cuerpo de una nota. */
+export const NOTE_BODY_MAX = 10000;
+/** Longitud maxima del titulo de una nota. */
+export const NOTE_TITLE_MAX = 200;
+
+export type NoteKind = 'note' | 'quick';
+
+/** Caducidad pedida por el cliente (ver `computeExpiresAt` en time.ts). */
+export type NoteExpiryInput =
+  { type: 'today' } | { type: 'days'; days: number } | { type: 'forever' };
+
+/** Nota tal como la devuelve la API. `expiresAt` null = sin caducidad. Nunca se envia a Google. */
+export interface NoteInfo {
+  id: string;
+  kind: NoteKind;
+  title: string | null;
+  body: string;
+  pinned: boolean;
+  expiresAt: string | null; // ISO-8601 UTC
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotesResponse {
+  notes: NoteInfo[];
+}
+
+export interface NoteCreate {
+  body: string;
+  title?: string | null;
+  kind?: NoteKind; // defecto 'note'
+  pinned?: boolean;
+  expiry?: NoteExpiryInput; // defecto: forever
+}
+
+export interface NotePatch {
+  body?: string;
+  title?: string | null;
+  pinned?: boolean;
+  expiry?: NoteExpiryInput; // recalcula desde el instante de la edicion
+}
+
+/** Nota rapida (kind = 'quick'). */
+export interface QuickNoteInfo {
+  id: string;
+  body: string;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export interface QuickNotesResponse {
+  quickNotes: QuickNoteInfo[];
+}
+
+export interface QuickNoteCreate {
+  body: string;
+  expiry?: NoteExpiryInput; // defecto: today
 }
