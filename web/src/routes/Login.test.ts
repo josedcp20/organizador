@@ -114,7 +114,13 @@ describe('Login con Face ID', () => {
     vi.spyOn(passkeys, 'platformAvailable').mockResolvedValue(available);
     getSpy = vi.spyOn(passkeys, 'authenticatePasskey').mockResolvedValue(assertion as never);
   }
-  const faceBtn = () => screen.findByRole('button', { name: 'Entrar con Face ID' });
+  // Espera a que las opciones precargadas esten guardadas: en CI el click llegaba antes y la carga seguia en vuelo.
+  const faceBtn = async () => {
+    const btn = await screen.findByRole('button', { name: 'Entrar con Face ID' });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 20));
+    return btn;
+  };
   const apiErr = (status: number, retry?: string) =>
     json(
       { error: { code: 'x', message: 'x' } },
@@ -197,7 +203,7 @@ describe('Login con Face ID', () => {
     const now = vi.spyOn(Date, 'now');
     render(Login);
     const btn = await faceBtn();
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     now.mockReturnValue(Date.now() + 5 * 60 * 1000);
     await fireEvent.click(btn);
     expect((await screen.findByRole('status')).textContent).toMatch(/pulsar|pulsa/);
