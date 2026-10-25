@@ -503,6 +503,7 @@ describe('Ajustes: seccion Face ID', () => {
     render(Ajustes);
     const btn = await screen.findByRole('button', { name: 'Activar Face ID' });
     await waitFor(() => expect(calls('POST', '/api/passkeys/register/options')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 20)); // la respuesta tarda en guardarse; en CI el click llegaba antes
     routes['GET /api/passkeys'] = () => json({ passkeys: [PK] });
     await fireEvent.input(screen.getByLabelText(/Nombre del dispositivo/), {
       target: { value: 'Mi iPhone' },
@@ -522,12 +523,14 @@ describe('Ajustes: seccion Face ID', () => {
     render(Ajustes);
     const btn = await screen.findByRole('button', { name: 'Activar Face ID' });
     await waitFor(() => expect(calls('POST', '/api/passkeys/register/options')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 20)); // la respuesta tarda en guardarse; en CI el click llegaba antes
     await fireEvent.click(btn);
     const sw = await screen.findByRole('button', {
       name: 'Usar Face ID en este dispositivo y olvidar el token',
     });
     // Opciones de login pedidas por adelantado (gesto de iOS).
     await waitFor(() => expect(calls('POST', '/api/passkeys/login/options')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 20));
     return sw;
   }
 
@@ -584,6 +587,7 @@ describe('Ajustes: seccion Face ID', () => {
     render(Ajustes);
     const btn = await screen.findByRole('button', { name: 'Activar Face ID' });
     await waitFor(() => expect(calls('POST', '/api/passkeys/register/options')).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 20)); // la respuesta tarda en guardarse; en CI el click llegaba antes
     await fireEvent.click(btn);
     await waitFor(() => expect(btn.hasAttribute('disabled')).toBe(false));
     expect(screen.queryByRole('alert')).toBeNull();
