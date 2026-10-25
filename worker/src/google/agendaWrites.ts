@@ -86,7 +86,7 @@ const rowFrozen = (r: WriteRow, env: Env) =>
 const readInfo = (env: Env, calendarId: string, eventId: string) =>
   getEventById(env.DB, calendarId, eventId, { tz: tzOf(env), forWrite: true });
 
-type Failure =
+export type Failure =
   | 'transient'
   | 'forbidden' // 403 de permiso del calendario: baja el rol en D1
   | 'denied' // 403 del evento / desconocido / local: se revierte sin tocar el rol
@@ -99,7 +99,7 @@ type Failure =
   | 'rejected';
 
 /** Clasifica el error de una llamada a Google; lo que no es de Google se relanza (500). */
-function classify(e: unknown): Failure {
+export function classify(e: unknown): Failure {
   if (e instanceof GoogleAuthError) {
     if (e.code === 'unavailable') return 'transient';
     if (e.code === 'misconfigured') return 'misconfigured';
@@ -371,7 +371,8 @@ async function resolveConflict(
     current = await getEvent(env, calendarId, eventId, { retry: writeRuntime.retry });
   } catch (e) {
     const f = classify(e);
-    if (f === 'transient') return keepPending(env, calendarId, eventId, m, 'conflict');
+    // 'transient' (no 'conflict'): la cola de T3.10 lo reintenta; el 412 se resolvera entonces.
+    if (f === 'transient') return keepPending(env, calendarId, eventId, m, 'transient');
     return revertFailed(env, before, calendarId, eventId, m, f);
   }
   if (!current) {

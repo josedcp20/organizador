@@ -18,6 +18,7 @@ import {
 } from '../src/google/eventPayload';
 import { deleteEvent, getEvent, insertEvent, patchEvent } from '../src/google/eventsWrite';
 import { GOOGLE_SCOPES } from '../src/google/oauth';
+import { runPendingWrites } from '../src/jobs/pendingWrites';
 import { runSync } from '../src/sync/engine';
 import { addCalendar, connect, FakeGoogle, fullEnv, NOW, OAUTH_ENV, resetDb } from './googleFake';
 import { call } from './helpers';
@@ -312,6 +313,53 @@ describe('T2.9 ejecucion: ningun dato privado sale hacia Google', () => {
     } finally {
       writeRuntime.retry = undefined;
     }
+  });
+
+  it('cola de pendientes (T3.10) con meta centinela y payload sucio: nada privado llega a Google', async () => {
+    const id = await eventIdFor(LOCAL);
+    await seedPrivateData(id);
+    const later = NOW + 10 * 60_000;
+    // Payloads pendientes "sucios" (como si un bug hubiera colado meta): toGooglePayload los filtra.
+    const pending = (op: string, fields?: EventFields) =>
+      JSON.stringify({ v: 1, writeId: `w-${op}`, op, fields });
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO events (calendar_id, id, status, summary, all_day, start_at, end_at, origin,
+           local_id, pending_op, pending_payload, pending_attempts, pending_since, write_error)
+         VALUES (?1, ?2, 'confirmed', 'Cita', 0, '2026-11-10T09:00:00.000Z', '2026-11-10T10:00:00.000Z',
+           'app', ?3, 'insert', ?4, 1, ?5, 'transient')`,
+      ).bind(CAL, id, LOCAL, pending('insert', dirty('Cita')), new Date(NOW).toISOString()),
+      ...['g1', 'g2'].map((g, i) =>
+        env.DB.prepare(
+          `INSERT INTO events (calendar_id, id, status, summary, all_day, start_at, end_at, etag,
+             updated, origin, pending_op, pending_payload, pending_attempts, pending_since, write_error)
+           VALUES (?1, ?2, 'confirmed', 'De Google', 0, '2026-11-12T09:00:00.000Z',
+             '2026-11-12T10:00:00.000Z', '"100"', '2026-10-01T00:00:00.000Z', 'google', ?3, ?4, 1, ?5,
+             'transient')`,
+        ).bind(
+          CAL,
+          g,
+          i ? 'delete' : 'patch',
+          i ? pending('delete') : pending('patch', dirty('G2')),
+          new Date(NOW).toISOString(),
+        ),
+      ),
+    ]);
+    for (const g of ['g1', 'g2']) {
+      google.put(CAL, {
+        id: g,
+        status: 'confirmed',
+        etag: '"100"',
+        summary: 'De Google',
+        start: { dateTime: '2026-11-12T09:00:00Z' },
+        end: { dateTime: '2026-11-12T10:00:00Z' },
+      });
+    }
+    setClock(() => later);
+    const r = await runPendingWrites(fullEnv(), { nowMs: later });
+    expect(r.counts.done).toBe(3);
+    assertNoLeak();
+    assertWriteBodies(LOCAL);
   });
 
   it('GET/PATCH /api/settings no emiten ninguna peticion a Google', async () => {

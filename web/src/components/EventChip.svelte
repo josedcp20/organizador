@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CalEvent } from '../lib/events';
-  import { eventTimeLabel } from '../lib/events';
+  import { eventTimeLabel, FINAL_ERRORS } from '../lib/events';
   import { eventHref } from '../router';
 
   let {
@@ -85,7 +85,8 @@
 </a>
 {#if !compact && event.pending && event.pendingError}
   <p class="err" role="alert">
-    No se pudo guardar en Google ({event.pendingError}). Se reintentara.
+    No se pudo guardar en Google ({event.pendingError}).
+    {FINAL_ERRORS.has(event.pendingError) ? 'No se reintentará.' : 'Se reintentará.'}
   </p>
 {/if}
 

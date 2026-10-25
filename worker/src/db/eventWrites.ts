@@ -65,6 +65,8 @@ export interface PendingPayload {
   op: PendingOp;
   /** Campos a enviar (insert/patch) ya validados (`EventFields`); T3.10 los reenvia via toGooglePayload. */
   fields?: unknown;
+  /** Cola (T3.10): inicio del primer intento de esta escritura, se conserva entre reintentos. */
+  queuedAt?: string;
 }
 
 export interface PendingMarker {
@@ -73,9 +75,14 @@ export interface PendingMarker {
   payload: string;
 }
 
-export function newPendingMarker(op: PendingOp, fields?: unknown): PendingMarker {
+export function newPendingMarker(
+  op: PendingOp,
+  fields?: unknown,
+  queuedAt?: string,
+): PendingMarker {
   const p: PendingPayload = { v: 1, writeId: crypto.randomUUID(), op };
   if (fields !== undefined) p.fields = fields;
+  if (queuedAt !== undefined) p.queuedAt = queuedAt;
   return { op, since: new Date(now()).toISOString(), payload: JSON.stringify(p) };
 }
 
@@ -303,6 +310,24 @@ export async function loadWriteRow(
     .first<WriteRow>();
 }
 
+/**
+ * Filas con escritura pendiente que la cola (T3.10) puede reintentar, la marca mas antigua primero.
+ * Reintentable = sin error (en vuelo o peticion muerta: la cola filtra por antiguedad) o con un fallo
+ * transitorio ('transient', 'not_connected'). El resto ('forbidden', 'conflict', 'rejected',
+ * 'duplicate', 'expired') es definitivo y no se vuelve a enviar.
+ */
+export async function listQueuedWrites(db: D1Database, limit: number): Promise<WriteRow[]> {
+  const r = await db
+    .prepare(
+      `SELECT ${WRITE_ROW_COLS} FROM events WHERE pending_op IS NOT NULL
+         AND (write_error IS NULL OR write_error IN ('transient', 'not_connected'))
+       ORDER BY pending_since LIMIT ?1`,
+    )
+    .bind(limit)
+    .all<WriteRow>();
+  return r.results;
+}
+
 /** Fila (de cualquier calendario) que ya usa este organizadorId. */
 export async function rowByLocalId(
   db: D1Database,
@@ -382,20 +407,20 @@ export async function markInsert(
 /**
  * Patch o delete optimista: aplica los valores (patch) y pone ESTA marca, solo si la fila no cambio
  * desde que se leyo (misma marca pendiente y mismo etag: compare-and-swap). false = otra escritura
- * o el sync la cambio entre medias.
+ * o el sync la cambio entre medias. `attempts`: intentos ya hechos (la cola de T3.10 los conserva).
  */
 export async function markChange(
   db: D1Database,
   row: WriteRow,
   v: DisplayValues,
   m: PendingMarker,
+  attempts = 0,
 ): Promise<boolean> {
   const sets = [
     'pending_op = ?7',
     'pending_payload = ?8',
     'pending_since = ?9',
     "pending_scope = 'instance'",
-    'pending_attempts = 0',
     'write_error = NULL',
   ];
   const vals: unknown[] = [];
@@ -403,6 +428,7 @@ export async function markChange(
     vals.push(val);
     sets.push(`${col} = ?${9 + vals.length}`);
   };
+  set('pending_attempts', attempts);
   if (v.summary !== undefined) set('summary', v.summary);
   if (v.location !== undefined) set('location', v.location);
   if (v.description !== undefined) set('description', v.description);

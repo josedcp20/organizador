@@ -1,10 +1,11 @@
 import type { Env } from '../env';
 import { DEFAULT_MAX_REQUESTS, runSync } from '../sync/engine';
 import { runCleanup } from './cleanup';
+import { runPendingWrites } from './pendingWrites';
 
 /**
  * Despachador del cron `*\/10 * * * *` (T2.5, D4). Un solo trigger que ejecuta en orden:
- *   1. escrituras pendientes a Google (hook, T3.10)
+ *   1. escrituras pendientes a Google (T3.10, jobs/pendingWrites.ts)
  *   2. resumen 8:00 / avisos D-N (hook, T4.4/T4.5): si hay envios pendientes se priorizan y se
  *      reduce el presupuesto de sync (subrequests y CPU compartidos)
  *   3. sync Google -> D1 (T2.4)
@@ -28,9 +29,16 @@ export interface ScheduledStep {
   run: (ctx: StepContext) => Promise<void>;
 }
 
-/** HOOK T3.10 (pendiente): reintento de escrituras pendientes (max 5 filas por ejecucion). */
-async function pendingWritesStep(): Promise<void> {
-  // TODO(T3.10): jobs/pendingWrites.ts. Debe ir ANTES del sync.
+/** Reintento de escrituras pendientes (T3.10): sus peticiones se descuentan del sync. */
+async function pendingWritesStep(ctx: StepContext): Promise<void> {
+  const r = await runPendingWrites(ctx.env, {
+    nowMs: ctx.nowMs,
+    budget: SUBREQUEST_LIMIT - 5 - ctx.reserved - DEFAULT_MAX_REQUESTS,
+  });
+  ctx.reserved += r.requests;
+  if (r.status !== 'ok' || r.requests > 0 || r.counts.expired > 0) {
+    console.log('cron', 'pending_writes', r.status, JSON.stringify(r.counts));
+  }
 }
 
 /** HOOK T4.4/T4.5 (pendiente): resumen 8:00 Madrid + avisos D-N con reintentos hasta 12:00. */

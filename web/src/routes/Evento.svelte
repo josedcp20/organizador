@@ -25,6 +25,7 @@
     type MetaForm,
   } from '../lib/eventDetail';
   import { conflictCurrent, deleteEvent, writeErrorMessage } from '../lib/eventWrite';
+  import { FINAL_ERRORS } from '../lib/events';
   import { apiErrorMessage } from '../lib/google';
   import { editEventHref, navigateTo } from '../router';
 
@@ -368,7 +369,10 @@
         {/if}
         {#if event.pending && event.pending.error}
           <p class="err" role="alert">
-            No se pudo enviar a Google: {event.pending.error}. Se reintentará.
+            No se pudo enviar a Google: {event.pending.error}.
+            {FINAL_ERRORS.has(event.pending.error)
+              ? 'No se reintentará: edítalo de nuevo o revísalo en Google.'
+              : 'Se reintentará.'}
           </p>
         {:else if event.pending}
           <p class="muted" role="status">Pendiente de enviar a Google.</p>

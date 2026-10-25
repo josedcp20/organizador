@@ -260,3 +260,13 @@ export function fetchEvents(
 ): Promise<EventsResponse> {
   return apiFetch<EventsResponse>(`/api/agenda?from=${from}&to=${to}`, { signal });
 }
+
+/** Errores de escritura definitivos: la cola del servidor ya no los reintenta (T3.10). */
+export const FINAL_ERRORS = new Set([
+  'forbidden',
+  'calendar_forbidden',
+  'conflict',
+  'rejected',
+  'duplicate',
+  'expired',
+]);
