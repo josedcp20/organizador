@@ -10,7 +10,25 @@ import { GoogleAuthError, getAccessToken } from './oauth';
  * `invalid_grant` ya gestionados alli). Nunca escribe en Google ni registra tokens.
  */
 const PAGE_SIZE = 250;
-const MAX_PAGES = 10;
+export const MAX_PAGES = 10;
+
+/** job_state: ultimo refresco correcto / ultimo intento fallido del cron (updated_at = instante). */
+export const CALENDAR_LIST_OK_KEY = 'calendar_list_ok_at';
+export const CALENDAR_LIST_FAIL_KEY = 'calendar_list_fail_at';
+
+export async function markCalendarListState(
+  db: D1Database,
+  key: string,
+  nowMs: number,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO job_state (key, value, updated_at) VALUES (?1, '1', ?2)
+       ON CONFLICT(key) DO UPDATE SET updated_at = excluded.updated_at`,
+    )
+    .bind(key, new Date(nowMs).toISOString())
+    .run();
+}
 
 export interface GoogleCalendarEntry {
   id: string;
@@ -48,7 +66,12 @@ function isAuthRejection(e: unknown): boolean {
 }
 
 /** Lista completa (paginada) de calendarios del usuario. Lanza GoogleAuthError o GoogleApiError. */
-export async function listCalendarList(env: Env): Promise<GoogleCalendarEntry[]> {
+/** `stats.requests` acumula las peticiones HTTP hechas (token + paginas) para el presupuesto del cron. */
+export async function listCalendarList(
+  env: Env,
+  stats?: { requests: number },
+): Promise<GoogleCalendarEntry[]> {
+  if (stats) stats.requests = 1; // token (peor caso)
   const token = await getAccessToken(env);
   const out: GoogleCalendarEntry[] = [];
   let pageToken: string | undefined;
@@ -56,6 +79,7 @@ export async function listCalendarList(env: Env): Promise<GoogleCalendarEntry[]>
     const query: Record<string, string> = { maxResults: String(PAGE_SIZE), showHidden: 'true' };
     if (pageToken) query.pageToken = pageToken;
     let body: unknown;
+    if (stats) stats.requests++;
     try {
       body = await googleRequest('GET', 'users/me/calendarList', { token, query });
     } catch (e) {
@@ -111,9 +135,17 @@ export interface ImportResult {
  * - Existente: actualiza nombre, rol, color de Google (referencia) y orden; NUNCA `color` ni
  *   `enabled` (decision del usuario).
  * - Desaparecido de Google: `removed_at` (no se borra: events.calendar_id tiene FK).
+ *   Seguro tambien en el cron: es reversible (si vuelve, removed_at = NULL), conserva `events` y
+ *   sus escrituras pendientes (la cola no mira `calendars`), y una lista truncada falla antes
+ *   (MAX_PAGES). Limite conocido: un 200 con lista vacia espuria ocultaria los calendarios hasta
+ *   el siguiente refresco (12 h o boton).
+ * - Al terminar anota el refresco correcto en job_state (el cron lo usa para espaciar los suyos).
  */
-export async function importCalendars(env: Env): Promise<ImportResult> {
-  const entries = await listCalendarList(env);
+export async function importCalendars(
+  env: Env,
+  stats?: { requests: number },
+): Promise<ImportResult> {
+  const entries = await listCalendarList(env, stats);
   const db = env.DB;
   const nowIso = new Date(now()).toISOString();
 
@@ -185,5 +217,6 @@ export async function importCalendars(env: Env): Promise<ImportResult> {
     }
   }
   if (stmts.length > 0) await db.batch(stmts);
+  await markCalendarListState(db, CALENDAR_LIST_OK_KEY, now());
   return { added, updated, removed };
 }

@@ -1,5 +1,13 @@
+import { acquireLock, releaseLock } from '../db/jobLock';
 import type { Env } from '../env';
-import { DEFAULT_MAX_REQUESTS, runSync } from '../sync/engine';
+import {
+  CALENDAR_LIST_FAIL_KEY,
+  CALENDAR_LIST_OK_KEY,
+  importCalendars,
+  markCalendarListState,
+  MAX_PAGES,
+} from '../google/calendarList';
+import { DEFAULT_MAX_REQUESTS, runSync, SYNC_LOCK_KEY, SYNC_LOCK_TTL_MS } from '../sync/engine';
 import { runCleanup } from './cleanup';
 import { runPendingWrites } from './pendingWrites';
 
@@ -8,8 +16,9 @@ import { runPendingWrites } from './pendingWrites';
  *   1. escrituras pendientes a Google (T3.10, jobs/pendingWrites.ts)
  *   2. resumen 8:00 / avisos D-N (hook, T4.4/T4.5): si hay envios pendientes se priorizan y se
  *      reduce el presupuesto de sync (subrequests y CPU compartidos)
- *   3. sync Google -> D1 (T2.4)
- *   4. limpieza (hook, T3.3: notas caducadas, auth_failures...)
+ *   3. refresco de la lista de calendarios cada 12 h (reintento minimo 1 h tras fallo)
+ *   4. sync Google -> D1 (T2.4)
+ *   5. limpieza (hook, T3.3: notas caducadas, auth_failures...)
  * Cada paso va aislado: un fallo se registra (solo nombre del paso y tipo de error, nunca datos)
  * y no impide los siguientes.
  */
@@ -47,6 +56,38 @@ async function digestStep(): Promise<void> {
   // (o enviarlos aqui) para que el sync use menos presupuesto.
 }
 
+export const CALENDAR_REFRESH_EVERY_MS = 12 * 3_600_000;
+export const CALENDAR_REFRESH_RETRY_MS = 3_600_000;
+
+async function lastMark(env: Env, key: string): Promise<number> {
+  const r = await env.DB.prepare('SELECT updated_at FROM job_state WHERE key = ?1')
+    .bind(key)
+    .first<{ updated_at: string }>();
+  return r ? Date.parse(r.updated_at) : 0;
+}
+
+/** Refresco automatico de calendarList (antes del sync). Un fallo no bloquea el resto del cron. */
+async function calendarListStep(ctx: StepContext): Promise<void> {
+  const { env, nowMs } = ctx;
+  if (nowMs - (await lastMark(env, CALENDAR_LIST_OK_KEY)) < CALENDAR_REFRESH_EVERY_MS) return;
+  if (nowMs - (await lastMark(env, CALENDAR_LIST_FAIL_KEY)) < CALENDAR_REFRESH_RETRY_MS) return;
+  // Peor caso: token + MAX_PAGES paginas; el sync conserva su presupuesto por defecto.
+  if (SUBREQUEST_LIMIT - 5 - ctx.reserved - DEFAULT_MAX_REQUESTS < 1 + MAX_PAGES) return;
+  const lock = await acquireLock(env.DB, SYNC_LOCK_KEY, SYNC_LOCK_TTL_MS, nowMs);
+  if (!lock) return;
+  const stats = { requests: 0 };
+  try {
+    const r = await importCalendars(env, stats);
+    console.log('cron', 'calendar_list', 'ok', JSON.stringify(r));
+  } catch (e) {
+    await markCalendarListState(env.DB, CALENDAR_LIST_FAIL_KEY, nowMs);
+    console.log('cron', 'calendar_list', 'failed', e instanceof Error ? e.name : 'unknown');
+  } finally {
+    ctx.reserved += stats.requests;
+    await releaseLock(env.DB, lock);
+  }
+}
+
 async function syncStep(ctx: StepContext): Promise<void> {
   // Presupuesto de peticiones a Google: el por defecto, recortado si otros pasos reservaron
   // subrequests (deja margen para el refresh del access token y los hooks).
@@ -66,6 +107,7 @@ async function cleanupStep(ctx: StepContext): Promise<void> {
 export const DEFAULT_STEPS: readonly ScheduledStep[] = [
   { name: 'pending_writes', run: pendingWritesStep },
   { name: 'digest', run: digestStep },
+  { name: 'calendar_list_refresh', run: calendarListStep },
   { name: 'sync', run: syncStep },
   { name: 'cleanup', run: cleanupStep },
 ];
