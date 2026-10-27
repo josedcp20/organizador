@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
 import { apiFetch, ApiError, getApiBase, clearApiCaches, logout } from './api';
+import { fakeSub, installPushBrowser, uninstallPushBrowser } from './pushTestEnv';
 import { setToken, getToken, clearToken, isLoggedIn, session } from './auth';
 
 const BASE = 'https://worker.example.workers.dev';
@@ -151,6 +152,29 @@ describe('logout', () => {
     expect(getToken()).toBeNull();
     expect(window.location.hash).toBe('#/login');
     await expect(clearApiCaches()).resolves.toBeUndefined();
+  });
+
+  it('da de baja el push con el token aun presente y aunque falle no bloquea', async () => {
+    const b = installPushBrowser({ current: fakeSub('https://web.push.apple.com/X') });
+    localStorage.setItem('organizador_push', '1');
+    setToken('t');
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    await logout();
+    const [url, init] = fetchMock.mock.calls[0] as [
+      string,
+      { method: string; headers: Record<string, string> },
+    ];
+    expect(url).toContain('/api/push/subscribe');
+    expect(init.method).toBe('DELETE');
+    expect(init.headers.Authorization).toBe('Bearer t');
+    expect(localStorage.getItem('organizador_push')).toBeNull();
+    expect(getToken()).toBeNull();
+
+    setToken('t');
+    b.pushManager.getSubscription.mockRejectedValue(new Error('boom'));
+    await logout();
+    expect(getToken()).toBeNull();
+    uninstallPushBrowser();
   });
 });
 

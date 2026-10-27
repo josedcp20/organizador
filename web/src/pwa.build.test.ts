@@ -57,4 +57,12 @@ describe('PWA build', () => {
     expect(sw).toContain('clients.claim');
     expect(sw).not.toContain('/api');
   });
+
+  it('sw: push siempre muestra notificacion y notificationclick', () => {
+    const sw = readFileSync(join(outDir, 'sw.js'), 'utf8');
+    expect(sw).toContain('showNotification');
+    expect(sw).toContain('notificationclick');
+    expect(sw).toContain('pushsubscriptionchange');
+    expect(sw).not.toContain('/api');
+  });
 });

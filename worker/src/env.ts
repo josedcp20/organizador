@@ -18,8 +18,9 @@ export interface Env {
   GOOGLE_CLIENT_SECRET?: string;
   TOKEN_ENC_KEY?: string;
   OAUTH_STATE_KEY?: string;
+  /** JWK privado P-256 completo (JSON). La clave publica se deriva de el (gen:vapid). */
   VAPID_PRIVATE_KEY?: string;
-  VAPID_PUBLIC_KEY?: string;
+  /** `sub` del JWT VAPID ([vars], U2). Sin valor se usa APP_URL. */
   VAPID_SUBJECT?: string;
 }
 

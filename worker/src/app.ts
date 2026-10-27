@@ -12,6 +12,7 @@ import { notes } from './routes/notes';
 import { oauth } from './routes/oauth';
 import { passkeyLogin } from './routes/passkeyLogin';
 import { passkeys } from './routes/passkeys';
+import { push } from './routes/push';
 import { quickNotes } from './routes/quickNotes';
 import { session } from './routes/session';
 import { settings } from './routes/settings';
@@ -37,6 +38,7 @@ app.route('/', settings);
 app.route('/', sync);
 app.route('/', notes);
 app.route('/', quickNotes);
+app.route('/', push);
 
 app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 

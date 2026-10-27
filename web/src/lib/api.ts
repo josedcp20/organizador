@@ -85,6 +85,9 @@ function isPublic(endpoint: string): boolean {
 /** Cierra sesion: borra token y caches de API y vuelve a login. */
 export async function logout(): Promise<void> {
   const token = getToken();
+  // Baja el push de este dispositivo con el token aun presente; nunca bloquea el logout.
+  // Import dinamico: push.ts importa apiFetch de este modulo.
+  await import('./push').then((m) => m.disablePush()).catch(() => undefined);
   // Best effort, sin bloquear: revoca la sesion Face ID en el servidor.
   if (token && isSessionToken(token)) {
     apiFetch('/api/session/logout', { method: 'POST', token }).catch(() => undefined);

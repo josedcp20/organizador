@@ -24,6 +24,7 @@
   import { ApiError, logout } from '../lib/api';
   import Banner from '../components/Banner.svelte';
   import PageHeader from '../components/PageHeader.svelte';
+  import PushSettings from '../components/PushSettings.svelte';
   import {
     duplicateColors,
     fetchCalendars,
@@ -768,10 +769,11 @@
     {/if}
   </section>
 
+  <PushSettings />
+
   <section class="group" aria-labelledby="more-title">
     <h2 id="more-title">Más ajustes</h2>
     <ul class="list soon">
-      <li class="row"><span class="grow">Notificaciones push</span><span class="small">Próximamente</span></li>
       <li class="row"><span class="grow">Preferencias visuales</span><span class="small">Próximamente</span></li>
       <li class="row"><span class="grow">Información de la app</span><span class="small">Próximamente</span></li>
     </ul>

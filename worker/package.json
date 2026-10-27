@@ -10,7 +10,8 @@
     "gen:token": "node scripts/gen-token.mjs",
     "dev": "wrangler dev",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "gen:secrets": "node scripts/gen-secrets.mjs"
+    "gen:secrets": "node scripts/gen-secrets.mjs",
+    "gen:vapid": "node scripts/gen-vapid.mjs"
   },
   "dependencies": {
     "@organizador/shared": "*",

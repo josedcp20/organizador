@@ -122,6 +122,23 @@ describe('migraciones (aplicadas en test/setup.ts)', () => {
     }
   });
 
+  it('0005: push_subscriptions tiene last_error y expires_at', async () => {
+    const c = await columns('push_subscriptions');
+    for (const col of [
+      'endpoint',
+      'p256dh',
+      'auth',
+      'device_label',
+      'created_at',
+      'last_success_at',
+      'fail_count',
+      'last_error',
+      'expires_at',
+    ]) {
+      expect(c).toContain(col);
+    }
+  });
+
   it('0004: sessions.passkey_id es PK sin ROWID', async () => {
     // WITHOUT ROWID optimiza para claves compuestas; verificamos que solo tiene lo esperado
     const info = await env.DB.prepare('PRAGMA table_info(sessions)').all<{

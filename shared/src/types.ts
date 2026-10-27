@@ -365,6 +365,10 @@ export interface TodayResponse {
   tomorrow: string;
   todayEvents: EventInfo[];
   tomorrowEvents: EventInfo[];
+  /** Avisos D-N vigentes (Fase 4, T4.5). */
+  reminders?: ReminderAlert[];
+  /** Resumen de hoy fallido/abandonado y no cerrado por el usuario (Fase 4, T4.4). */
+  digestAlert?: DigestAlert | null;
 }
 
 // --- Notas y notas rapidas (T3.2) ---
@@ -514,4 +518,77 @@ export const PASSKEY_LIMITS = {
   sessionTtlSeconds: 30 * 24 * 60 * 60, // 30 dias
   /** Vida del nonce consumido (segundos, debe ser > challengeTtlSeconds). */
   consumedNonceTtlSeconds: 600, // 10 min
+} as const;
+
+// --- Web Push (Fase 4)
+
+/** Estado del resumen diario en `digest_log`. */
+export type DigestStatus = 'pending' | 'sent' | 'failed' | 'gave_up' | 'no_subscriptions';
+
+/** Resumen de un dia (`digest_log`). */
+export interface DigestInfo {
+  date: string; // YYYY-MM-DD Europe/Madrid
+  status: DigestStatus;
+  attempts: number;
+  lastError: string | null;
+  sentAt: string | null; // ISO-8601 UTC
+}
+
+/** Banner de Hoy cuando el resumen de hoy no llego. */
+export interface DigestAlert {
+  date: string;
+  status: 'failed' | 'gave_up';
+  lastError: string | null;
+}
+
+/** Aviso D-N de un evento marcado con "Avisar". */
+export interface ReminderAlert {
+  calendarId: string;
+  id: string;
+  summary: string;
+  date: string; // YYYY-MM-DD de inicio
+  inDays: number; // 1..remindDaysBefore
+}
+
+/** Dispositivo suscrito (nunca expone endpoint ni claves). */
+export interface PushSubscriptionInfo {
+  /** 16 hex de SHA-256(endpoint) */
+  id: string;
+  label: string;
+  createdAt: string;
+  lastOkAt: string | null;
+  failCount: number;
+  lastError: string | null;
+}
+
+/** `GET /api/push/status` */
+export interface PushStatusResponse {
+  /** false si falta o es invalido VAPID_PRIVATE_KEY. */
+  configured: boolean;
+  /** applicationServerKey (base64url, 65 bytes) o null si no esta configurado. */
+  publicKey: string | null;
+  subject: string;
+  subscriptions: PushSubscriptionInfo[];
+  digest: DigestInfo | null;
+}
+
+/** `POST /api/push/subscribe` -> 200 */
+export interface PushSubscribeResult {
+  id: string;
+}
+
+/** `POST /api/push/test` -> 200 */
+export interface PushTestResult {
+  sent: number;
+  failed: number;
+  removed: number;
+}
+
+export const PUSH_LIMITS = {
+  /** U9: al superar el maximo se expulsa la mas antigua. */
+  maxSubscriptions: 5,
+  /** Intervalo minimo entre `POST /api/push/test`. */
+  testIntervalMs: 30_000,
+  /** Longitud maxima del cuerpo de la notificacion del resumen. */
+  bodyMax: 180,
 } as const;

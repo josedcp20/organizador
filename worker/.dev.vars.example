@@ -10,9 +10,10 @@ GOOGLE_CLIENT_SECRET=
 # Usa valores DISTINTOS a los de produccion.
 TOKEN_ENC_KEY=
 OAUTH_STATE_KEY=
+# Web Push: JWK privado P-256 (la publica se deriva). Generar SIN mostrarlo en pantalla con:
+#   npm run gen:vapid -w worker -- --dev-vars
+# (VAPID_SUBJECT va en [vars] de wrangler.toml)
 VAPID_PRIVATE_KEY=
-VAPID_PUBLIC_KEY=
-VAPID_SUBJECT=
 # Solo desarrollo local (habilita CORS para http://localhost:5173)
 ENV=dev
 # Desarrollo local: callback y vuelta a la web servidas en localhost (sobrescriben [vars]).

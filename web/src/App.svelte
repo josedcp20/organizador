@@ -11,6 +11,16 @@
   import Notas from './routes/Notas.svelte';
   import NotaRapida from './routes/NotaRapida.svelte';
   import Ajustes from './routes/Ajustes.svelte';
+  import { syncPushOnOpen } from './lib/push';
+
+  // Una vez por apertura con sesion: re-registra la suscripcion push (sin bloquear, sin errores).
+  let pushSynced = false;
+  $effect(() => {
+    if ($session && !pushSynced) {
+      pushSynced = true;
+      void syncPushOnOpen();
+    }
+  });
 
   // Guard: sin token solo se ve login y no se monta ninguna vista con datos.
   $effect(() => {
