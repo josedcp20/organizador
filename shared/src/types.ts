@@ -211,6 +211,8 @@ export interface EventInfo {
    * rellena; es opcional solo para no obligar a los mocks de la UI.
    */
   metaScopes?: EventMetaScopes;
+  /** Marcado como hecho (D1, solo en la app). null = no marcado. */
+  done?: boolean;
 }
 
 /** Ambito de los datos privados de un evento: la instancia concreta o toda la serie recurrente. */
@@ -252,6 +254,14 @@ export interface EventMetaInput {
   remind_days_before?: number | null;
   /** #rrggbb */
   color?: string | null;
+}
+
+/**
+ * Body de `PUT /api/agenda/:calendarId/:eventId/done` (D1, D2). Marca o desmarca un evento
+ * como hecho. Responde con el `EventInfo` actualizado. Idempotente.
+ */
+export interface EventDoneInput {
+  done: boolean;
 }
 
 export interface EventPending {
@@ -380,6 +390,22 @@ export const NOTE_TITLE_MAX = 200;
 
 export type NoteKind = 'note' | 'quick';
 
+/** Paso de granularidad para alarmas (minutos): remind_at solo admite multiplos de este valor. */
+export const ALARM_STEP_MIN = 10;
+
+/** Texto fijo del push de alarma de nota rápida. */
+export const ALARM_PUSH_TEXT = 'NOTA!!!!!';
+
+/** Limites y configuracion de alarmas en notas rapidas. */
+export const NOTE_ALARM_LIMITS = {
+  maxAheadDays: 365,
+  pastToleranceMs: 60_000,
+  retryWindowMs: 6 * 3_600_000,
+  maxAttempts: 10,
+  perRun: 3,
+  keepAfterMs: 24 * 3_600_000,
+} as const;
+
 /** Caducidad pedida por el cliente (ver `computeExpiresAt` en time.ts). */
 export type NoteExpiryInput =
   { type: 'today' } | { type: 'days'; days: number } | { type: 'forever' };
@@ -394,6 +420,10 @@ export interface NoteInfo {
   expiresAt: string | null; // ISO-8601 UTC
   createdAt: string;
   updatedAt: string;
+  /** Alarma (solo en notas rapidas). ISO-8601 UTC; null = sin alarma. */
+  remindAt?: string | null;
+  /** Estado de la alarma. null si no hay alarma. */
+  remindState?: 'pending' | 'sent' | 'gave_up' | null;
 }
 
 export interface NotesResponse {
@@ -413,6 +443,8 @@ export interface NotePatch {
   title?: string | null;
   pinned?: boolean;
   expiry?: NoteExpiryInput; // recalcula desde el instante de la edicion
+  /** Alarma de nota rapida (solo en notas rapidas). null = quitar alarma. */
+  remind_at?: string | null;
 }
 
 /** Nota rapida (kind = 'quick'). */
@@ -421,6 +453,10 @@ export interface QuickNoteInfo {
   body: string;
   expiresAt: string | null;
   createdAt: string;
+  /** Alarma. ISO-8601 UTC; null = sin alarma. */
+  remindAt?: string | null;
+  /** Estado de la alarma. null si no hay alarma. */
+  remindState?: 'pending' | 'sent' | 'gave_up' | null;
 }
 
 export interface QuickNotesResponse {
@@ -430,6 +466,8 @@ export interface QuickNotesResponse {
 export interface QuickNoteCreate {
   body: string;
   expiry?: NoteExpiryInput; // defecto: today
+  /** Alarma. ISO-8601 UTC con offset o hora local de Europe/Madrid. null = sin alarma. */
+  remind_at?: string | null;
 }
 
 // --- Autenticacion con passkeys (WebAuthn, Face ID en iOS)

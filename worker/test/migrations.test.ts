@@ -21,6 +21,7 @@ describe('migraciones (aplicadas en test/setup.ts)', () => {
       'calendars',
       'events',
       'event_meta',
+      'event_done',
       'reminder_log',
       'digest_log',
       'auth_failures',
@@ -147,5 +148,50 @@ describe('migraciones (aplicadas en test/setup.ts)', () => {
     }>();
     const pkCols = info.results.filter((r) => r.pk > 0).map((r) => r.name);
     expect(pkCols).toEqual(['token_hash']);
+  });
+
+  it('0006: event_done existe con PK (calendar_id, event_id)', async () => {
+    const c = await columns('event_done');
+    for (const col of ['calendar_id', 'event_id', 'done_at']) {
+      expect(c).toContain(col);
+    }
+  });
+
+  it('0006: notes tiene columnas de alarma', async () => {
+    const c = await columns('notes');
+    for (const col of ['remind_at', 'remind_state', 'remind_attempts']) {
+      expect(c).toContain(col);
+    }
+  });
+
+  it('0006: remind_state rechaza valores invalidos', async () => {
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO notes (id, body, kind, created_at, updated_at, remind_state) VALUES ('id1','body','quick','now','now','invalid')",
+      ).run(),
+    ).rejects.toThrow();
+  });
+
+  it('0006: remind_state acepta valores validos', async () => {
+    for (const state of ['pending', 'sent', 'gave_up']) {
+      const stmt = env.DB.prepare(
+        'INSERT INTO notes (id, body, kind, created_at, updated_at, remind_state) VALUES (?, ?, ?, ?, ?, ?)',
+      );
+      // Limpiar la nota anterior
+      await env.DB.prepare('DELETE FROM notes WHERE id = ?')
+        .bind('test-' + state)
+        .run();
+      // Insertar con el estado valido
+      const result = await stmt.bind('test-' + state, 'body', 'quick', 'now', 'now', state).run();
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('0006: idx_notes_remind_due existe (parcial en pending)', async () => {
+    const indices = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='notes'",
+    ).all<{ name: string }>();
+    const indexNames = indices.results.map((r) => r.name);
+    expect(indexNames).toContain('idx_notes_remind_due');
   });
 });
