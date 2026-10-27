@@ -138,7 +138,7 @@ describe('Notas', () => {
     handlers['PATCH /api/notes/:id'] = () => json(note('a', { body: 'nuevo' }));
     render(Notas);
     await screen.findByText('viejo');
-    await fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
     await fireEvent.input(screen.getByLabelText('Nota'), { target: { value: 'nuevo' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
     await screen.findByText('nuevo');
@@ -408,7 +408,7 @@ describe('Notas alarmas', () => {
     handlers['PATCH /api/notes/:id'] = () => json(quick('q1'));
     render(Notas);
     await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
     expect((screen.getByLabelText('Hora de la alarma') as HTMLSelectElement).value).toBe('18');
     await fireEvent.click(screen.getByRole('button', { name: 'Quitar alarma' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
@@ -422,7 +422,7 @@ describe('Notas alarmas', () => {
     handlers['PATCH /api/notes/:id'] = () => json(quick('q1'));
     render(Notas);
     await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
     await fireEvent.input(screen.getByLabelText('Nota'), { target: { value: 'otro' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
     await waitFor(() => expect(calls.some((c) => c.key.startsWith('PATCH'))).toBe(true));
@@ -436,7 +436,7 @@ describe('Notas alarmas', () => {
     handlers['PATCH /api/notes/:id'] = () => json({ error: { code: 'bad', message: 'm' } }, 400);
     render(Notas);
     await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Editar' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
     expect(await screen.findByText(/Revisa el texto, la caducidad y la alarma/)).toBeTruthy();
   });

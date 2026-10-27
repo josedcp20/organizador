@@ -30,6 +30,8 @@
     flex: none;
     align-items: center;
     justify-content: center;
+    /* Ancho fijo: `.list > li > button` (base.css) fuerza width:100% a botones hijos de la lista */
+    width: var(--tap);
     min-width: var(--tap);
     min-height: var(--tap);
     padding: 0;
@@ -51,6 +53,9 @@
     border-color: var(--mark-ink);
     background: var(--mark);
     color: var(--mark-ink);
+  }
+  .done-toggle:hover {
+    background: none;
   }
   .done-toggle:disabled {
     opacity: 0.6;
