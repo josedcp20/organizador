@@ -12,6 +12,7 @@ export interface EventRow {
   eventId: string;
   remind: boolean;
   hasNotes: boolean;
+  done: boolean;
   time: string;
   title: string;
   location: string | null;
@@ -61,6 +62,7 @@ export function toRow(e: EventInfo, day?: string): EventRow {
     eventId: e.id,
     remind: e.remind === true,
     hasNotes: typeof e.notes === 'string' && e.notes.trim() !== '',
+    done: e.done === true,
     time: formatEventTime(e, day),
     title: e.summary?.trim() || '(Sin título)',
     location: e.location?.trim() || null,

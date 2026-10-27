@@ -359,3 +359,85 @@ describe('expiryLabel', () => {
   });
   it('caducada', () => expect(expiryLabel('2026-10-23T09:00:00.000Z', now)).toBe('caducada'));
 });
+
+describe('Notas alarmas', () => {
+  const quick = (id: string, over: Record<string, unknown> = {}) =>
+    note(id, { kind: 'quick', body: `rapida ${id}`, ...over });
+  const R = '2030-10-27T17:30:00.000Z';
+
+  it('muestra el estado de la alarma (pending, sent, gave_up) en hora de Madrid', async () => {
+    handlers['GET /api/notes'] = () =>
+      json({
+        notes: [
+          quick('p', { remindAt: R, remindState: 'pending' }),
+          quick('s', { remindAt: R, remindState: 'sent' }),
+          quick('g', { remindAt: R, remindState: 'gave_up' }),
+        ],
+      });
+    render(Notas);
+    await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
+    expect(screen.getByText('Alarma: dom 27/10 18:30')).toBeTruthy();
+    expect(screen.getByText('Sonó a las 18:30')).toBeTruthy();
+    expect(screen.getByText('No se pudo avisar')).toBeTruthy();
+  });
+
+  it('deep link ?nota=<id> selecciona Rapidas, resalta y enfoca la nota', async () => {
+    window.location.hash = '#/notas?nota=q2';
+    handlers['GET /api/notes'] = () => json({ notes: [note('n1'), quick('q1'), quick('q2')] });
+    render(Notas);
+    const el = await screen.findByText('rapida q2');
+    const li = el.closest('li')!;
+    await waitFor(() => expect(document.activeElement).toBe(li));
+    expect(li.classList.contains('highlight')).toBe(true);
+    expect(screen.getByRole('button', { name: /Rápidas/ }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(screen.queryByText('cuerpo n1')).toBeNull();
+  });
+
+  it('deep link con id inexistente muestra Banner', async () => {
+    window.location.hash = '#/notas?nota=zzz';
+    handlers['GET /api/notes'] = () => json({ notes: [quick('q1')] });
+    render(Notas);
+    expect(await screen.findByText(/La nota ya no existe/)).toBeTruthy();
+  });
+
+  it('quitar la alarma envia remind_at null', async () => {
+    handlers['GET /api/notes'] = () =>
+      json({ notes: [quick('q1', { remindAt: R, remindState: 'pending' })] });
+    handlers['PATCH /api/notes/:id'] = () => json(quick('q1'));
+    render(Notas);
+    await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect((screen.getByLabelText('Hora de la alarma') as HTMLSelectElement).value).toBe('18');
+    await fireEvent.click(screen.getByRole('button', { name: 'Quitar alarma' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(calls.some((c) => c.key.startsWith('PATCH'))).toBe(true));
+    expect(JSON.parse(calls.find((c) => c.key.startsWith('PATCH'))!.body!).remind_at).toBeNull();
+  });
+
+  it('editar solo el texto no envia remind_at', async () => {
+    handlers['GET /api/notes'] = () =>
+      json({ notes: [quick('q1', { remindAt: R, remindState: 'pending' })] });
+    handlers['PATCH /api/notes/:id'] = () => json(quick('q1'));
+    render(Notas);
+    await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await fireEvent.input(screen.getByLabelText('Nota'), { target: { value: 'otro' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(calls.some((c) => c.key.startsWith('PATCH'))).toBe(true));
+    expect('remind_at' in JSON.parse(calls.find((c) => c.key.startsWith('PATCH'))!.body!)).toBe(
+      false,
+    );
+  });
+
+  it('el 400 de la API se muestra en espanol', async () => {
+    handlers['GET /api/notes'] = () => json({ notes: [quick('q1')] });
+    handlers['PATCH /api/notes/:id'] = () => json({ error: { code: 'bad', message: 'm' } }, 400);
+    render(Notas);
+    await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(await screen.findByText(/Revisa el texto, la caducidad y la alarma/)).toBeTruthy();
+  });
+});

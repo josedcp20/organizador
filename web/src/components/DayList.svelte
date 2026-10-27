@@ -8,11 +8,16 @@
     byDay,
     today,
     showEmpty = false,
+    onToggleDone,
+    doneBusy,
   }: {
     days: string[];
     byDay: Map<string, CalEvent[]>;
     today: string;
     showEmpty?: boolean;
+    onToggleDone?: (event: CalEvent) => void;
+    /** Claves `calendarId/id` con peticion en vuelo. */
+    doneBusy?: Record<string, boolean>;
   } = $props();
 
   const shown = $derived(showEmpty ? days : days.filter((d) => byDay.has(d)));
@@ -33,7 +38,12 @@
       </h3>
       <ul class="list">
         {#each byDay.get(day) ?? [] as ev (ev.calendarId + ev.id)}
-          <li><EventChip event={ev} {day} /></li>
+          <li><EventChip
+            event={ev}
+            {day}
+            {onToggleDone}
+            doneBusy={!!doneBusy?.[ev.calendarId + '/' + ev.id]}
+          /></li>
         {:else}
           <li><p class="list-row muted">Sin eventos</p></li>
         {/each}

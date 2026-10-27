@@ -59,6 +59,46 @@ describe('NotaRapida', () => {
     await waitFor(() => expect(window.location.hash).toBe('#/hoy'));
   });
 
+  it('sin alarma no envia remind_at; con alarma envia YYYY-MM-DDTHH:mm de 10 en 10', async () => {
+    render(NotaRapida);
+    expect(screen.queryByLabelText('Hora de la alarma')).toBeNull();
+    await fireEvent.input(screen.getByLabelText('Texto de la nota'), {
+      target: { value: 'sonar' },
+    });
+    await fireEvent.click(screen.getByLabelText('Activar alarma'));
+    const mins = Array.from(
+      (screen.getByLabelText('Minutos de la alarma') as HTMLSelectElement).options,
+    ).map((o) => o.value);
+    expect(mins).toEqual(['00', '10', '20', '30', '40', '50']);
+    expect(screen.getByText(/Activa las notificaciones en Ajustes/)).toBeTruthy();
+    await fireEvent.input(screen.getByLabelText('Fecha de la alarma'), {
+      target: { value: '2030-01-15' },
+    });
+    await fireEvent.change(screen.getByLabelText('Hora de la alarma'), { target: { value: '09' } });
+    await fireEvent.change(screen.getByLabelText('Minutos de la alarma'), {
+      target: { value: '30' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(bodies.length).toBe(1));
+    expect(bodies[0]).toEqual({
+      body: 'sonar',
+      expiry: { type: 'today' },
+      remind_at: '2030-01-15T09:30',
+    });
+  });
+
+  it('alarma en el pasado no se envia', async () => {
+    render(NotaRapida);
+    await fireEvent.input(screen.getByLabelText('Texto de la nota'), { target: { value: 'x' } });
+    await fireEvent.click(screen.getByLabelText('Activar alarma'));
+    await fireEvent.input(screen.getByLabelText('Fecha de la alarma'), {
+      target: { value: '2020-01-01' },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    expect(await screen.findByText('La alarma no puede estar en el pasado.')).toBeTruthy();
+    expect(bodies.length).toBe(0);
+  });
+
   it('Ctrl+Enter guarda', async () => {
     render(NotaRapida);
     const ta = screen.getByLabelText('Texto de la nota');

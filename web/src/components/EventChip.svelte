@@ -2,12 +2,23 @@
   import type { CalEvent } from '../lib/events';
   import { eventTimeLabel, FINAL_ERRORS } from '../lib/events';
   import { eventHref } from '../router';
+  import DoneToggle from './DoneToggle.svelte';
 
   let {
     event,
     day,
     compact = false,
-  }: { event: CalEvent; day?: string; compact?: boolean } = $props();
+    onToggleDone,
+    doneBusy = false,
+  }: {
+    event: CalEvent;
+    day?: string;
+    compact?: boolean;
+    /** Sin handler no hay casilla (p. ej. la celda del mes). */
+    onToggleDone?: (event: CalEvent) => void;
+    doneBusy?: boolean;
+  } = $props();
+  const toggle = $derived(!compact && !!onToggleDone);
 
   const time = $derived(eventTimeLabel(event, day, compact));
 
@@ -52,12 +63,14 @@
   </span>
 {/snippet}
 
+{#snippet link()}
 <a
   class="chip"
   href={eventHref(event.calendarId, event.id)}
   class:compact
   class:tentative={event.tentative}
   class:allday={event.allDay || event.multiDay}
+  class:done={event.done}
   style:--c={event.color}
   style:--on={on}
   data-testid="event-chip"
@@ -83,6 +96,21 @@
     {/if}
   </span>
 </a>
+{/snippet}
+
+{#if toggle}
+  <div
+    class="list-row wrap"
+    class:allday={event.allDay || event.multiDay}
+    style:--c={event.color}
+    style:--on={on}
+  >
+    {@render link()}
+    <DoneToggle done={event.done} busy={doneBusy} title={event.title} onToggle={() => onToggleDone?.(event)} />
+  </div>
+{:else}
+  {@render link()}
+{/if}
 {#if !compact && event.pending && event.pendingError}
   <p class="err" role="alert">
     No se pudo guardar en Google ({event.pendingError}).
@@ -91,6 +119,14 @@
 {/if}
 
 <style>
+  .wrap {
+    padding: 0 0 0 var(--sp-4);
+  }
+  .wrap > .chip {
+    flex: 1;
+    min-height: var(--tap);
+    padding: var(--sp-3) 0;
+  }
   .chip {
     display: flex;
     align-items: center;
@@ -133,9 +169,32 @@
   }
 
   /* Dia completo / multi-dia: bloque solido con el color del calendario */
-  .chip.allday {
+  .chip.allday,
+  .wrap.allday {
     background: var(--c);
     color: var(--on);
+  }
+  .wrap.allday :global(.done-toggle) {
+    color: var(--on);
+  }
+  .wrap.allday :global(.box) {
+    border-color: var(--on);
+  }
+  .wrap.allday :global(.on .box) {
+    border-color: var(--mark-ink);
+  }
+
+  /* Hecho: atenuado y tachado, sin moverse ni desaparecer */
+  .chip.done .body,
+  .chip.done .marks {
+    opacity: 0.55;
+  }
+  .chip.done .title {
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
+  }
+  .chip.compact.done .title {
+    text-decoration: none;
   }
   .allday .time,
   .allday .loc,

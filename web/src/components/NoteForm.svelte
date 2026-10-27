@@ -7,13 +7,16 @@
     pinned: boolean;
     mode: ExpiryMode;
     days: number;
+    /** Solo notas rapidas: undefined = sin cambios, null = quitar, string = nueva alarma. */
+    remindAt?: string | null;
   }
 </script>
 
 <script lang="ts">
   import type { NoteInfo } from '@organizador/shared';
+  import AlarmPicker from './AlarmPicker.svelte';
   import ExpiryPicker from './ExpiryPicker.svelte';
-  import { NOTE_MAX_CHARS, daysValid } from '../lib/notes';
+  import { NOTE_MAX_CHARS, daysValid, toMadridLocalInput, validateAlarm } from '../lib/notes';
 
   let {
     note = null,
@@ -39,6 +42,9 @@
   // svelte-ignore state_referenced_locally
   let mode = $state<ExpiryMode>(note ? 'keep' : 'forever');
   let days = $state(7);
+  // svelte-ignore state_referenced_locally
+  const initialAlarm = note?.remindAt ? toMadridLocalInput(note.remindAt) : '';
+  let remindAt = $state(initialAlarm);
   let localError = $state('');
 
   function submit(e: Event) {
@@ -56,7 +62,14 @@
       localError = 'Los días deben ser un número entero entre 1 y 365.';
       return;
     }
-    onsubmit({ title, body, pinned, mode, days });
+    const alarmError = remindAt && remindAt !== initialAlarm ? validateAlarm(remindAt) : '';
+    if (alarmError) {
+      localError = alarmError;
+      return;
+    }
+    const v: NoteFormValues = { title, body, pinned, mode, days };
+    if (note?.kind === 'quick' && remindAt !== initialAlarm) v.remindAt = remindAt || null;
+    onsubmit(v);
   }
 </script>
 
@@ -73,6 +86,7 @@
     <input type="checkbox" bind:checked={pinned} /> Fijar arriba
   </label>
   <ExpiryPicker bind:mode bind:days allowKeep={note !== null} idPrefix="nf" />
+  {#if note?.kind === 'quick'}<AlarmPicker bind:value={remindAt} idPrefix="nf" />{/if}
   {#if localError || error}
     <p class="err" role="alert">{localError || error}</p>
   {/if}

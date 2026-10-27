@@ -31,6 +31,7 @@ export interface CalEvent {
   remind: boolean;
   /** Tiene notas privadas no vacias (valor resuelto). */
   hasNotes: boolean;
+  done: boolean;
 }
 
 const timeFmt = new Intl.DateTimeFormat('es-ES', {
@@ -94,6 +95,7 @@ export function mapEvent(e: EventInfo): CalEvent | null {
     location: e.location,
     remind: e.remind === true,
     hasNotes: typeof e.notes === 'string' && e.notes.trim() !== '',
+    done: e.done === true,
   };
 }
 

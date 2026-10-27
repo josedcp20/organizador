@@ -39,6 +39,7 @@ interface EventRow {
   ms_remind: number | null;
   ms_days: number | null;
   ms_color: string | null;
+  done_at: string | null;
 }
 
 export interface ReadOptions {
@@ -66,7 +67,7 @@ const SELECT_BASE = `SELECT e.id, e.calendar_id, e.status, e.summary, e.location
               mi.remind_days_before AS mi_days, mi.color AS mi_color,
               CASE WHEN ms.target_id IS NULL THEN NULL ELSE 1 END AS ms_present,
               ms.notes AS ms_notes, ms.remind AS ms_remind,
-              ms.remind_days_before AS ms_days, ms.color AS ms_color
+              ms.remind_days_before AS ms_days, ms.color AS ms_color, d.done_at
        FROM events e
        JOIN calendars c ON c.id = e.calendar_id
        LEFT JOIN event_meta mi
@@ -74,6 +75,7 @@ const SELECT_BASE = `SELECT e.id, e.calendar_id, e.status, e.summary, e.location
        LEFT JOIN event_meta ms
          ON ms.calendar_id = e.calendar_id AND ms.scope = 'series'
         AND ms.target_id = e.recurring_event_id
+       LEFT JOIN event_done d ON d.calendar_id = e.calendar_id AND d.event_id = e.id
        WHERE c.removed_at IS NULL AND e.status != 'cancelled'`;
 
 /** Lectura normal: solo calendarios visibles y sin los borrados pendientes de confirmar. */
@@ -208,5 +210,6 @@ function toInfo(r: EventRow, w: FrozenWindow): EventInfo {
     pending:
       op === 'insert' || op === 'patch' || op === 'delete' ? { op, error: r.write_error } : null,
     metaScopes: { instance, series },
+    done: r.done_at !== null,
   };
 }

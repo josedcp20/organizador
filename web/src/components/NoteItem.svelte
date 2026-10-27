@@ -1,17 +1,19 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import type { NoteInfo } from '@organizador/shared';
-  import { expiryLabel } from '../lib/notes';
+  import { alarmLabel, expiryLabel } from '../lib/notes';
 
   let {
     note,
     busy = false,
+    highlight = false,
     onedit,
     onpin,
     ondelete,
   }: {
     note: NoteInfo;
     busy?: boolean;
+    highlight?: boolean;
     onedit: () => void;
     onpin: () => void;
     ondelete: () => void;
@@ -33,11 +35,34 @@
     deleteBtn?.focus();
   }
   const label = $derived(expiryLabel(note.expiresAt));
+  const alarm = $derived(alarmLabel(note));
+  let li = $state<HTMLLIElement | undefined>();
+
+  // Deep link del push: scroll + foco para lectores de pantalla.
+  $effect(() => {
+    if (!highlight || !li) return;
+    li.scrollIntoView?.({ block: 'center' });
+    li.focus({ preventScroll: true });
+  });
 </script>
 
-<li class="note" class:pinned={note.pinned}>
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<li
+  class="note"
+  class:pinned={note.pinned}
+  class:highlight
+  bind:this={li}
+  tabindex={highlight ? -1 : undefined}
+  aria-label={highlight ? 'Nota de la alarma' : undefined}
+>
   {#if note.title}<h3>{note.title}</h3>{/if}
   <p class="body">{note.body}</p>
+  {#if alarm}
+    <p class="alarm" class:fail={note.remindState === 'gave_up'} class:done={note.remindState === 'sent'}>
+      <span aria-hidden="true">{note.remindState === 'gave_up' ? '🔕' : '🔔'}</span>
+      <span>{alarm}</span>
+    </p>
+  {/if}
   <p class="meta">
     {#if note.pinned}<span class="badge">Fijada</span>{/if}
     <span class="expiry" class:warn={label.startsWith('caduca hoy')}>{label}</span>
@@ -80,6 +105,27 @@
 
   .note.pinned {
     border-left-color: var(--ink-2);
+  }
+
+  .note.highlight {
+    outline: 2px solid var(--accent, var(--ink-2));
+    outline-offset: -2px;
+  }
+
+  .alarm {
+    display: flex;
+    gap: var(--sp-2);
+    font-size: var(--fs-s);
+    font-weight: 600;
+  }
+
+  .alarm.done {
+    color: var(--ink-2);
+    font-weight: 400;
+  }
+
+  .alarm.fail {
+    color: var(--danger);
   }
 
   h3 {

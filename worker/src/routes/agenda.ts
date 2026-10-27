@@ -14,6 +14,7 @@ import {
   upsertEventMeta,
   type MetaKey,
 } from '../db/eventMeta';
+import { setEventDone } from '../db/eventDone';
 import { getEventById, listEventsInRange } from '../db/eventsRead';
 import type { Env } from '../env';
 import { errorBody } from '../errors';
@@ -94,6 +95,37 @@ agenda.delete('/api/agenda/:calendarId/:eventId/meta', async (c) => {
     return c.json(errorBody('validation', "scope must be 'instance' or 'series'"), 400);
   }
   return withMetaTarget(c, scope, (key) => deleteEventMeta(c.env.DB, key));
+});
+
+/** Hecho (solo D1, nunca Google). Funciona en calendarios reader y eventos congelados. */
+agenda.put('/api/agenda/:calendarId/:eventId/done', async (c) => {
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json(errorBody('validation', 'Body must be JSON'), 400);
+  }
+  const o = raw as Record<string, unknown> | null;
+  if (
+    !o ||
+    typeof o !== 'object' ||
+    Array.isArray(o) ||
+    Object.keys(o).length !== 1 ||
+    typeof o.done !== 'boolean'
+  ) {
+    return c.json(errorBody('validation', 'Body must be { done: boolean }'), 400);
+  }
+  const calendarId = c.req.param('calendarId');
+  const eventId = c.req.param('eventId');
+  const opts = { tz: tzOf(c.env) };
+  if (!(await getEventById(c.env.DB, calendarId, eventId, opts))) {
+    return c.json(errorBody('not_found', 'Event not found'), 404);
+  }
+  await setEventDone(c.env.DB, calendarId, eventId, o.done);
+  const updated = await getEventById(c.env.DB, calendarId, eventId, opts);
+  if (!updated) return c.json(errorBody('not_found', 'Event not found'), 404);
+  c.header('Cache-Control', NO_STORE);
+  return c.json(updated);
 });
 
 /** Resuelve el evento (404), la clave del ambito (400 si `series` sin serie), aplica y relee. */

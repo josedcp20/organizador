@@ -141,3 +141,10 @@ describe('calendarios', () => {
     expect(syncErrorMessage(new Error('x'))).toMatch(/No se pudo/);
   });
 });
+
+describe('toRow: done', () => {
+  it('done solo si es true', () => {
+    expect(toRow(ev({ done: true })).done).toBe(true);
+    expect(toRow(ev()).done).toBe(false);
+  });
+});

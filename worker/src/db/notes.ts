@@ -1,4 +1,9 @@
-import type { NoteInfo, NoteKind, QuickNoteInfo } from '@organizador/shared';
+import {
+  NOTE_ALARM_LIMITS,
+  type NoteInfo,
+  type NoteKind,
+  type QuickNoteInfo,
+} from '@organizador/shared';
 
 /** Fila de `notes`. Las notas NUNCA se envian a Google: solo viven en D1. */
 interface NoteRow {
@@ -10,9 +15,12 @@ interface NoteRow {
   expires_at: string | null;
   created_at: string;
   updated_at: string;
+  remind_at: string | null;
+  remind_state: 'pending' | 'sent' | 'gave_up' | null;
 }
 
-const COLS = 'id, body, title, kind, pinned, expires_at, created_at, updated_at';
+const COLS =
+  'id, body, title, kind, pinned, expires_at, created_at, updated_at, remind_at, remind_state';
 /** Vigente = sin caducidad o con caducidad estrictamente futura. Las caducadas nunca salen de aqui. */
 const LIVE = '(expires_at IS NULL OR expires_at > ?)';
 
@@ -26,11 +34,19 @@ function toInfo(r: NoteRow): NoteInfo {
     expiresAt: r.expires_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    // Solo con alarma: sin ella la forma de la respuesta no cambia.
+    ...(r.remind_at ? { remindAt: r.remind_at, remindState: r.remind_state } : {}),
   };
 }
 
 export function toQuickInfo(n: NoteInfo): QuickNoteInfo {
-  return { id: n.id, body: n.body, expiresAt: n.expiresAt, createdAt: n.createdAt };
+  return {
+    id: n.id,
+    body: n.body,
+    expiresAt: n.expiresAt,
+    createdAt: n.createdAt,
+    ...(n.remindAt ? { remindAt: n.remindAt, remindState: n.remindState } : {}),
+  };
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -73,28 +89,41 @@ export interface NewNote {
   kind: NoteKind;
   pinned: boolean;
   expiresAt: string | null;
+  /** ISO UTC (solo kind quick); la validacion vive en la ruta. */
+  remindAt?: string | null;
 }
+
+/** SQL: la nota con alarma pendiente no caduca antes de alarma + keepAfterMs (formato = toISOString). */
+const CLAMP_SQL = `UPDATE notes SET expires_at = strftime('%Y-%m-%dT%H:%M:%fZ', remind_at, '+${NOTE_ALARM_LIMITS.keepAfterMs / 3_600_000} hours')
+  WHERE id = ? AND remind_state = 'pending' AND expires_at > ?
+    AND expires_at < strftime('%Y-%m-%dT%H:%M:%fZ', remind_at, '+${NOTE_ALARM_LIMITS.keepAfterMs / 3_600_000} hours')`;
 
 export async function insertNote(db: D1Database, n: NewNote, nowMs: number): Promise<NoteInfo> {
   const id = crypto.randomUUID();
   const ts = iso(nowMs);
-  await db
-    .prepare(
-      `INSERT INTO notes (id, body, title, kind, pinned, expires_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(id, n.body, n.title, n.kind, n.pinned ? 1 : 0, n.expiresAt, ts, ts)
-    .run();
-  return {
-    id,
-    kind: n.kind,
-    title: n.title,
-    body: n.body,
-    pinned: n.pinned,
-    expiresAt: n.expiresAt,
-    createdAt: ts,
-    updatedAt: ts,
-  };
+  const remindAt = n.remindAt ?? null;
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO notes (id, body, title, kind, pinned, expires_at, created_at, updated_at, remind_at, remind_state)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        id,
+        n.body,
+        n.title,
+        n.kind,
+        n.pinned ? 1 : 0,
+        n.expiresAt,
+        ts,
+        ts,
+        remindAt,
+        remindAt ? 'pending' : null,
+      ),
+    db.prepare(CLAMP_SQL).bind(id, ts),
+  ]);
+  const row = await db.prepare(`SELECT ${COLS} FROM notes WHERE id = ?`).bind(id).first<NoteRow>();
+  return toInfo(row as NoteRow);
 }
 
 export interface NoteChanges {
@@ -103,6 +132,8 @@ export interface NoteChanges {
   pinned?: boolean;
   /** undefined = no tocar; null = sin caducidad. */
   expiresAt?: string | null;
+  /** undefined = no tocar; null = quitar alarma; ISO = fijar (pending, attempts 0). */
+  remindAt?: string | null;
 }
 
 /** Actualiza solo una nota vigente. Devuelve false si no existe o ya caduco. */
@@ -130,12 +161,17 @@ export async function updateLiveNote(
     sets.push('expires_at = ?');
     binds.push(ch.expiresAt);
   }
+  if (ch.remindAt !== undefined) {
+    sets.push('remind_at = ?', 'remind_state = ?', 'remind_attempts = 0');
+    binds.push(ch.remindAt, ch.remindAt ? 'pending' : null);
+  }
   sets.push('updated_at = ?');
   binds.push(iso(nowMs), id, iso(nowMs));
-  const r = await db
-    .prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND ${LIVE}`)
-    .bind(...binds)
-    .run();
+  // Mismo batch: el clamp se reaplica tras cualquier edicion (alarma o caducidad nuevas).
+  const [r] = await db.batch([
+    db.prepare(`UPDATE notes SET ${sets.join(', ')} WHERE id = ? AND ${LIVE}`).bind(...binds),
+    db.prepare(CLAMP_SQL).bind(id, iso(nowMs)),
+  ]);
   return (r.meta.changes ?? 0) > 0;
 }
 

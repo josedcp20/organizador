@@ -6,6 +6,7 @@
   import NoteForm, { type NoteFormValues } from '../components/NoteForm.svelte';
   import NoteItem from '../components/NoteItem.svelte';
   import { ApiError } from '../lib/api';
+  import { getQueryParams } from '../router';
   import {
     createNote,
     deleteNote,
@@ -32,6 +33,7 @@
   let seq = 0;
   let alive = true;
   let now = $state(Date.now());
+  let highlightId = $state<string | null>(null);
 
   // Las caducadas no se muestran aunque sigan en memoria o en la cache.
   const live = $derived(notes.filter((n) => !isExpired(n.expiresAt, now)));
@@ -62,6 +64,7 @@
       notes = res.notes;
       offline = false;
       saveNotesCache(res.notes);
+      applyDeepLink();
     } catch (e) {
       if (mine !== seq || !alive) return;
       if (e instanceof ApiError && e.status === 401) return;
@@ -70,11 +73,25 @@
         notes = cache.notes.filter((n) => !isExpired(n.expiresAt, Date.now()));
         offline = true;
         savedAt = cache.savedAt;
+        applyDeepLink();
       } else {
         error = `No se pudieron cargar las notas. ${noteErrorMessage(e)}`;
       }
     } finally {
       if (mine === seq && alive) loading = false;
+    }
+  }
+
+  /** `#/notas?nota=<id>` (abierto desde el push): muestra "Rápidas" y resalta la nota. */
+  function applyDeepLink() {
+    const id = getQueryParams().get('nota');
+    highlightId = null;
+    if (!id) return;
+    if (live.some((n) => n.id === id && n.kind === 'quick')) {
+      filter = 'quick';
+      highlightId = id;
+    } else {
+      actionError = 'La nota ya no existe (puede haber caducado).';
     }
   }
 
@@ -115,6 +132,7 @@
         title: v.title.trim() || null,
         pinned: v.pinned,
         ...(expiry ? { expiry } : {}),
+        ...(v.remindAt !== undefined ? { remind_at: v.remindAt } : {}),
       });
       if (!alive) return;
       setNotes(notes.map((n) => (n.id === id ? updated : n)));
@@ -182,10 +200,16 @@
     alive = true;
     void load();
     const timer = setInterval(() => (now = Date.now()), 30_000);
+    // Push tocado con la app ya abierta en #/notas: solo cambia la query.
+    const onHash = () => {
+      if (!loading) applyDeepLink();
+    };
+    window.addEventListener('hashchange', onHash);
     return () => {
       alive = false;
       seq++;
       clearInterval(timer);
+      window.removeEventListener('hashchange', onHash);
     };
   });
 </script>
@@ -254,6 +278,7 @@
       <NoteItem
         note={n}
         {busy}
+        highlight={n.id === highlightId}
         onedit={() => startEdit(n.id)}
         onpin={() => togglePin(n)}
         ondelete={() => remove(n)}

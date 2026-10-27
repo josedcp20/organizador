@@ -10,7 +10,13 @@ import { deleteLiveNote, insertNote, listLiveNotes, toQuickInfo } from '../db/no
 import type { Env } from '../env';
 import { errorBody } from '../errors';
 import { DEFAULT_TZ } from '../sync/window';
-import { parseBodyText, parseExpiry, parseExpiryParam, readJsonObject } from './notes';
+import {
+  parseBodyText,
+  parseExpiry,
+  parseExpiryParam,
+  parseRemindAt,
+  readJsonObject,
+} from './notes';
 
 /**
  * Notas rapidas (T3.2): mismas filas de `notes` con kind = 'quick'. Las usa el Atajo de iOS, que
@@ -83,6 +89,7 @@ quickNotes.post('/api/quick-notes', async (c) => {
   }
 
   let rawText: unknown;
+  let rawRemind: unknown;
   if (isText) {
     // arrayBuffer + TextDecoder: evita el aviso de workerd por .text() en tipos no textuales.
     const text = new TextDecoder().decode(await c.req.arrayBuffer());
@@ -92,7 +99,7 @@ quickNotes.post('/api/quick-notes', async (c) => {
     const j = await readJsonObject(c.req.raw);
     if (!j.ok) return c.json(bad(j.message), 400);
     const b = j.value;
-    const unknown = Object.keys(b).filter((k) => k !== 'body' && k !== 'expiry');
+    const unknown = Object.keys(b).filter((k) => !['body', 'expiry', 'remind_at'].includes(k));
     if (unknown.length > 0) return c.json(bad(`Unknown field: ${unknown[0]}`), 400);
     if ('expiry' in b) {
       if (spec) return c.json(bad('expiry given twice (query and body)'), 400);
@@ -101,12 +108,15 @@ quickNotes.post('/api/quick-notes', async (c) => {
       spec = e.value;
     }
     rawText = b.body;
+    rawRemind = b.remind_at;
   }
 
   const text = parseBodyText(rawText);
   if (!text.ok) return c.json(bad(text.message), 400);
   const nowMs = now();
   const tz = c.env.TZ || DEFAULT_TZ;
+  const remind = parseRemindAt(rawRemind ?? null, tz, nowMs);
+  if (!remind.ok) return c.json(bad(remind.message), 400);
   const note = await insertNote(
     c.env.DB,
     {
@@ -115,6 +125,7 @@ quickNotes.post('/api/quick-notes', async (c) => {
       kind: 'quick',
       pinned: false,
       expiresAt: computeExpiresAt(spec ?? DEFAULT_EXPIRY, new Date(nowMs), tz),
+      remindAt: remind.value,
     },
     nowMs,
   );

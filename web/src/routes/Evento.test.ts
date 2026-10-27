@@ -568,3 +568,22 @@ describe('Evento: editar y borrar', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('Evento: hecho', () => {
+  it('casilla marca con PUT {done:true} y revierte si falla', async () => {
+    mount();
+    const btn = await screen.findByRole('button', { name: 'Hecho: Dentista' });
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    respond = (m, u) =>
+      m === 'PUT' && u.pathname.endsWith('/done') ? json({ error: 'x' }, 500) : null;
+    await fireEvent.click(btn);
+    expect((await screen.findByRole('alert')).textContent).toMatch(/No se pudo marcar/);
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    respond = (m, u) =>
+      m === 'PUT' && u.pathname.endsWith('/done') ? json({ ...current, done: true }) : null;
+    await fireEvent.click(btn);
+    await waitFor(() => expect(btn.getAttribute('aria-pressed')).toBe('true'));
+    expect(putBody(1)).toEqual({ done: true });
+    expect(screen.getByText('✓ Hecho')).toBeTruthy();
+  });
+});

@@ -1,4 +1,5 @@
 import { now } from '../clock';
+import { deleteEventDone } from '../db/eventDone';
 import { deleteEventMeta } from '../db/eventMeta';
 import {
   applyGoogleDelete,
@@ -105,8 +106,10 @@ function isExpired(r: WriteRow, nowMs: number): boolean {
   );
 }
 
-const deleteInstanceMeta = (env: Env, r: WriteRow) =>
-  deleteEventMeta(env.DB, { calendarId: r.calendar_id, scope: 'instance', targetId: r.id });
+const deleteInstanceMeta = async (env: Env, r: WriteRow) => {
+  await deleteEventMeta(env.DB, { calendarId: r.calendar_id, scope: 'instance', targetId: r.id });
+  await deleteEventDone(env.DB, r.calendar_id, r.id);
+};
 
 /**
  * Fallo definitivo: insert/patch quedan pendientes con el motivo (la UI lo muestra y no se

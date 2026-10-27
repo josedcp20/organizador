@@ -198,3 +198,11 @@ describe('eventTimeLabel', () => {
     expect(eventTimeLabel({ ...multi, allDay: true, startTime: null }, '2026-10-21')).toBe('');
   });
 });
+
+describe('mapEvent: done', () => {
+  it('done solo si es true', () => {
+    expect(mapEvent(ev({ done: true }))!.done).toBe(true);
+    expect(mapEvent(ev({ done: false }))!.done).toBe(false);
+    expect(mapEvent(ev())!.done).toBe(false);
+  });
+});

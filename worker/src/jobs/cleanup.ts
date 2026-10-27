@@ -1,3 +1,4 @@
+import { purgeOrphanDone } from '../db/eventDone';
 import { purgeExpired } from '../db/sessions';
 import { purgeAuthFailures } from '../middleware/auth';
 
@@ -26,6 +27,7 @@ export async function runCleanup(
   challenges: number;
 }> {
   const notes = await cleanupExpiredNotes(db, nowMs);
+  await purgeOrphanDone(db, nowMs);
   const authFailures = await purgeAuthFailures(db, nowMs);
   const { sessions, challenges } = await purgeExpired(db, nowMs);
   return { notes, authFailures, sessions, challenges };

@@ -2,7 +2,9 @@
   import { onMount, untrack } from 'svelte';
     import { addDaysToDateStr } from '@organizador/shared';
   import type { EventInfo } from '@organizador/shared';
+  import type { CalEvent } from '../lib/events';
   import { fetchCalendars } from '../lib/calendars';
+  import { toggleEventDone } from '../lib/eventDetail';
   import {
     filterCalendars,
     hiddenCalendars,
@@ -105,6 +107,22 @@
     return () => ctrl?.abort();
   });
 
+  let doneBusy = $state<Record<string, boolean>>({});
+  let doneError = $state('');
+
+  async function toggleDone(ev: CalEvent): Promise<void> {
+    const key = ev.calendarId + '/' + ev.id;
+    if (doneBusy[key]) return;
+    doneBusy[key] = true;
+    doneError = '';
+    const apply = (done: boolean) => {
+      raw = raw.map((r) => (r.calendarId === ev.calendarId && r.id === ev.id ? { ...r, done } : r));
+    };
+    const err = await toggleEventDone(ev.calendarId, ev.id, !ev.done, apply);
+    doneBusy[key] = false;
+    if (err) doneError = err;
+  }
+
   function pickDay(day: string): void {
     anchor = day;
     view = 'agenda';
@@ -156,12 +174,23 @@
   <p class="msg" role="status">Cargando eventos...</p>
 {/if}
 
+{#if doneError}
+  <Banner kind="error">{doneError}</Banner>
+{/if}
+
 {#if !error}
   <div class="content" class:stale={loading}>
     {#if view === 'month'}
       <MonthGrid from={range.from} month={anchor.slice(0, 7)} {byDay} {today} onPickDay={pickDay} />
     {:else}
-      <DayList {days} {byDay} {today} showEmpty={view === 'week'} />
+      <DayList
+        {days}
+        {byDay}
+        {today}
+        showEmpty={view === 'week'}
+        onToggleDone={toggleDone}
+        {doneBusy}
+      />
     {/if}
     {#if isEmpty}
       <p class="msg">No hay eventos en este periodo.</p>

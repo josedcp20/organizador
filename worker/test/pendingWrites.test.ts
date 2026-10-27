@@ -245,6 +245,9 @@ describe('cola de escrituras pendientes: cada operacion', () => {
     await seedEvent('e1');
     await seedMeta('instance', 'e1');
     await seedMeta('series', 'serie1');
+    await env.DB.prepare("INSERT INTO event_done VALUES (?1, 'e1', '2026-10-20T00:00:00.000Z')")
+      .bind(CAL)
+      .run();
     fail3();
     expect((await send('DELETE', evPath('e1'))).status).toBe(202);
     expect(await metaTargets()).toHaveLength(2);
@@ -253,6 +256,10 @@ describe('cola de escrituras pendientes: cada operacion', () => {
     expect(writes().at(-1)!.method).toBe('DELETE');
     expect(await row('e1')).toBeNull();
     expect(await metaTargets()).toEqual([{ scope: 'series', target_id: 'serie1' }]);
+    const left = await env.DB.prepare('SELECT COUNT(*) AS n FROM event_done').first<{
+      n: number;
+    }>();
+    expect(left!.n).toBe(0);
   });
 
   it('delete que Google ya no tenia (404) = exito y tambien limpia la meta', async () => {

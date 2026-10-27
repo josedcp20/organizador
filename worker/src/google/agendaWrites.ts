@@ -1,6 +1,7 @@
 import type { AgendaWriteErrorCode, EventInfo } from '@organizador/shared';
 import { now } from '../clock';
 import { isWritableRole } from '../db/calendars';
+import { deleteEventDone } from '../db/eventDone';
 import { deleteEventMeta } from '../db/eventMeta';
 import { getEventById } from '../db/eventsRead';
 import {
@@ -396,8 +397,10 @@ async function resolveConflict(
   };
 }
 
-const deleteInstanceMeta = (env: Env, calendarId: string, eventId: string) =>
-  deleteEventMeta(env.DB, { calendarId, scope: 'instance', targetId: eventId });
+const deleteInstanceMeta = async (env: Env, calendarId: string, eventId: string) => {
+  await deleteEventMeta(env.DB, { calendarId, scope: 'instance', targetId: eventId });
+  await deleteEventDone(env.DB, calendarId, eventId);
+};
 
 export async function deleteAgendaEvent(
   env: Env,

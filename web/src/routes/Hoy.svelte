@@ -5,6 +5,8 @@
   import PageHeader from '../components/PageHeader.svelte';
   import { apiErrorMessage, fetchGoogleStatus } from '../lib/google';
   import { calendarsWithSyncError, fetchCalendars } from '../lib/calendars';
+  import DoneToggle from '../components/DoneToggle.svelte';
+  import { toggleEventDone } from '../lib/eventDetail';
   import { fetchToday, toRows } from '../lib/today';
   import { eventHref, newEventHref } from '../router';
 
@@ -35,6 +37,24 @@
     } finally {
       if (mine === seq) loading = false;
     }
+  }
+
+  let doneBusy = $state<Record<string, boolean>>({});
+  let doneError = $state('');
+
+  async function toggleDone(calendarId: string, eventId: string, key: string, next: boolean) {
+    if (doneBusy[key]) return;
+    doneBusy[key] = true;
+    doneError = '';
+    const apply = (done: boolean) => {
+      if (!data) return;
+      const upd = (l: TodayResponse['todayEvents']) =>
+        l.map((e) => (e.calendarId === calendarId && e.id === eventId ? { ...e, done } : e));
+      data = { ...data, todayEvents: upd(data.todayEvents), tomorrowEvents: upd(data.tomorrowEvents) };
+    };
+    const err = await toggleEventDone(calendarId, eventId, next, apply);
+    doneBusy[key] = false;
+    if (err) doneError = err;
   }
 
   const days = $derived(
@@ -104,6 +124,10 @@
   <Banner kind="error">{error}</Banner>
 {/if}
 
+{#if doneError}
+  <Banner kind="error">{doneError}</Banner>
+{/if}
+
 {#if loading && !data}
   <p role="status" class="muted">Cargando...</p>
 {/if}
@@ -121,7 +145,7 @@
       {:else}
         <ul class="list">
           {#each day.rows as row (row.id)}
-            <li>
+            <li class="row" class:done={row.done}>
               <a class="event" href={eventHref(row.calendarId, row.eventId)}>
                 <span class="bar" style="--c: {row.color}"></span>
                 <time class="time">{row.time}</time>
@@ -150,6 +174,12 @@
                   {/if}
                 </span>
               </a>
+              <DoneToggle
+                done={row.done}
+                busy={!!doneBusy[row.id]}
+                title={row.title}
+                onToggle={() => toggleDone(row.calendarId, row.eventId, row.id, !row.done)}
+              />
             </li>
           {/each}
         </ul>
@@ -203,6 +233,25 @@
     padding: var(--sp-4);
     border-radius: var(--r-m);
     background: var(--surface);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+  }
+  .row > .event {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+    padding-right: 0;
+  }
+  /* Hecho: atenuado y tachado, en su sitio */
+  .done .event > :global(*) {
+    opacity: 0.55;
+  }
+  .done .title {
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
   }
 
   .event {

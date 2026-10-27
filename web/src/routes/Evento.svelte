@@ -10,6 +10,7 @@
   import Banner from '../components/Banner.svelte';
   import ConfirmExternal from '../components/ConfirmExternal.svelte';
   import ConflictDialog from '../components/ConflictDialog.svelte';
+  import DoneToggle from '../components/DoneToggle.svelte';
   import PageHeader from '../components/PageHeader.svelte';
   import { ApiError } from '../lib/api';
   import { fetchCalendars } from '../lib/calendars';
@@ -21,6 +22,7 @@
     formForScope,
     saveEventMeta,
     shadowedFields,
+    toggleEventDone,
     type MetaField,
     type MetaForm,
   } from '../lib/eventDetail';
@@ -180,6 +182,20 @@
     void run('clear', () => clearEventMeta(calendarId, eventId, s));
   }
 
+  let doneBusy = $state(false);
+  let doneError = $state('');
+
+  async function toggleDone() {
+    if (!event || doneBusy) return;
+    doneBusy = true;
+    doneError = '';
+    const err = await toggleEventDone(calendarId, eventId, !event.done, (done) => {
+      if (event) event = { ...event, done };
+    });
+    doneBusy = false;
+    if (err) doneError = err;
+  }
+
   function leave() {
     if (window.history.length > 1) window.history.back();
     else navigateTo('calendario');
@@ -296,6 +312,12 @@
     <button type="button" class="btn" onclick={() => load()}>Reintentar</button>
   {:else if event}
     <PageHeader {title} />
+
+    <div class="done-row" class:done={event.done}>
+      <DoneToggle done={event.done === true} busy={doneBusy} {title} onToggle={toggleDone} />
+      <span>{event.done ? '✓ Hecho' : 'Marcar como hecho'}</span>
+    </div>
+    {#if doneError}<Banner kind="error">{doneError}</Banner>{/if}
 
     {#if canWrite}
       <div class="ev-actions">
@@ -594,6 +616,17 @@
     margin-bottom: var(--sp-2);
     padding: 0 var(--sp-3) 0 var(--sp-2);
     gap: var(--sp-1);
+  }
+  .done-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    font-weight: 600;
+  }
+  /* Hecho: la fecha y los datos de Google, atenuados y tachados */
+  .done-row.done ~ .cols :global(.when) {
+    opacity: 0.55;
+    text-decoration: line-through;
   }
   .ev-actions {
     display: flex;

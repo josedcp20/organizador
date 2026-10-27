@@ -1,4 +1,6 @@
 import {
+  ALARM_STEP_MIN,
+  NOTE_ALARM_LIMITS,
   NOTE_BODY_MAX,
   NOTE_TITLE_MAX,
   computeExpiresAt,
@@ -19,6 +21,8 @@ import {
 } from '../db/notes';
 import type { Env } from '../env';
 import { errorBody } from '../errors';
+import { DEFAULT_TZ } from '../sync/window';
+import { parseInstant } from './agendaInput';
 
 /**
  * Notas (T3.2). Protegido por el middleware Bearer de /api/*. Solo D1: ninguna ruta de notas
@@ -70,6 +74,29 @@ export function parseExpiryParam(v: string): Parsed<ExpirySpec> {
   return fail('expiry must be today, forever or an integer 1..365');
 }
 
+/**
+ * `remind_at`: null (quitar) o instante (local Madrid o ISO con offset) en minutos multiplo de
+ * ALARM_STEP_MIN, no pasado (> tolerancia) y a lo sumo maxAheadDays. Devuelve ISO UTC.
+ */
+export function parseRemindAt(v: unknown, tz: string, nowMs: number): Parsed<string | null> {
+  if (v === null) return { ok: true, value: null };
+  const t = parseInstant(v, tz);
+  if (!t)
+    return fail(
+      'remind_at must be an ISO date-time (with offset, or local Europe/Madrid time) or null',
+    );
+  const ms = Date.parse(t);
+  if (ms % (ALARM_STEP_MIN * 60_000) !== 0) {
+    return fail(`remind_at must be on a ${ALARM_STEP_MIN}-minute step with zero seconds`);
+  }
+  if (ms < nowMs - NOTE_ALARM_LIMITS.pastToleranceMs)
+    return fail('remind_at must not be in the past');
+  if (ms > nowMs + NOTE_ALARM_LIMITS.maxAheadDays * 86_400_000) {
+    return fail(`remind_at must be within ${NOTE_ALARM_LIMITS.maxAheadDays} days`);
+  }
+  return { ok: true, value: t };
+}
+
 function parseTitle(v: unknown): Parsed<string | null> {
   if (v === null) return { ok: true, value: null };
   if (typeof v !== 'string') return fail('title must be a string or null');
@@ -111,7 +138,7 @@ notes.post('/api/notes', async (c) => {
   if (!j.ok) return c.json(bad(j.message), 400);
   const b = j.value;
   const unknown = Object.keys(b).filter(
-    (k) => !['body', 'title', 'kind', 'pinned', 'expiry'].includes(k),
+    (k) => !['body', 'title', 'kind', 'pinned', 'expiry', 'remind_at'].includes(k),
   );
   if (unknown.length > 0) return c.json(bad(`Unknown field: ${unknown[0]}`), 400);
 
@@ -142,9 +169,23 @@ notes.post('/api/notes', async (c) => {
     spec = e.value;
   }
   const nowMs = now();
+  let remindAt: string | null = null;
+  if (b.remind_at !== undefined) {
+    if (kind !== 'quick') return c.json(bad('remind_at is only valid on quick notes'), 400);
+    const r = parseRemindAt(b.remind_at, c.env.TZ || DEFAULT_TZ, nowMs);
+    if (!r.ok) return c.json(bad(r.message), 400);
+    remindAt = r.value;
+  }
   const note = await insertNote(
     c.env.DB,
-    { body: text.value, title, kind, pinned, expiresAt: computeExpiresAt(spec, new Date(nowMs)) },
+    {
+      body: text.value,
+      title,
+      kind,
+      pinned,
+      expiresAt: computeExpiresAt(spec, new Date(nowMs)),
+      remindAt,
+    },
     nowMs,
   );
   c.header('Cache-Control', NO_STORE);
@@ -158,7 +199,9 @@ notes.patch('/api/notes/:id', async (c) => {
   const b = j.value;
   const keys = Object.keys(b);
   if (keys.length === 0) return c.json(bad('Nothing to update'), 400);
-  const unknown = keys.filter((k) => !['body', 'title', 'pinned', 'expiry'].includes(k));
+  const unknown = keys.filter(
+    (k) => !['body', 'title', 'pinned', 'expiry', 'remind_at'].includes(k),
+  );
   if (unknown.length > 0) return c.json(bad(`Unknown field: ${unknown[0]}`), 400);
 
   const changes: NoteChanges = {};
@@ -181,6 +224,14 @@ notes.patch('/api/notes/:id', async (c) => {
     const e = parseExpiry(b.expiry);
     if (!e.ok) return c.json(bad(e.message), 400);
     changes.expiresAt = computeExpiresAt(e.value, new Date(nowMs));
+  }
+  if ('remind_at' in b) {
+    const cur = await getLiveNote(c.env.DB, id, nowMs);
+    if (!cur) return c.json(notFound(), 404);
+    if (cur.kind !== 'quick') return c.json(bad('remind_at is only valid on quick notes'), 400);
+    const r = parseRemindAt(b.remind_at, c.env.TZ || DEFAULT_TZ, nowMs);
+    if (!r.ok) return c.json(bad(r.message), 400);
+    changes.remindAt = r.value;
   }
   if (!(await updateLiveNote(c.env.DB, id, changes, nowMs))) return c.json(notFound(), 404);
   const note = await getLiveNote(c.env.DB, id, nowMs);

@@ -8,11 +8,13 @@ import {
   MAX_PAGES,
 } from '../google/calendarList';
 import { DEFAULT_MAX_REQUESTS, runSync, SYNC_LOCK_KEY, SYNC_LOCK_TTL_MS } from '../sync/engine';
+import { runAlarms } from './alarms';
 import { runCleanup } from './cleanup';
 import { runPendingWrites } from './pendingWrites';
 
 /**
  * Despachador del cron `*\/10 * * * *` (T2.5, D4). Un solo trigger que ejecuta en orden:
+ *   0. alarmas de notas rapidas (H5, jobs/alarms.ts; lock propio, sin cron por minuto)
  *   1. escrituras pendientes a Google (T3.10, jobs/pendingWrites.ts)
  *   2. resumen 8:00 / avisos D-N (hook, T4.4/T4.5): si hay envios pendientes se priorizan y se
  *      reduce el presupuesto de sync (subrequests y CPU compartidos)
@@ -36,6 +38,20 @@ export interface StepContext {
 export interface ScheduledStep {
   name: string;
   run: (ctx: StepContext) => Promise<void>;
+}
+
+/**
+ * Alarmas de notas rapidas (H5), primero por ser las mas sensibles al retraso. Su presupuesto
+ * deja intacto el del sync; los push hechos se descuentan de los pasos siguientes.
+ */
+async function alarmsStep(ctx: StepContext): Promise<void> {
+  const r = await runAlarms(
+    ctx.env,
+    ctx.nowMs,
+    SUBREQUEST_LIMIT - 5 - ctx.reserved - DEFAULT_MAX_REQUESTS,
+  );
+  ctx.reserved += r.requests;
+  if (r.status === 'ok') console.log('cron', 'alarms', JSON.stringify(r.counts));
 }
 
 /** Reintento de escrituras pendientes (T3.10): sus peticiones se descuentan del sync. */
@@ -105,6 +121,7 @@ async function cleanupStep(ctx: StepContext): Promise<void> {
 }
 
 export const DEFAULT_STEPS: readonly ScheduledStep[] = [
+  { name: 'alarms', run: alarmsStep },
   { name: 'pending_writes', run: pendingWritesStep },
   { name: 'digest', run: digestStep },
   { name: 'calendar_list_refresh', run: calendarListStep },

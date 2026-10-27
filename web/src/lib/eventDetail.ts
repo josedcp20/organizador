@@ -11,6 +11,7 @@ import {
   isHexColor,
 } from '@organizador/shared';
 import { apiFetch } from './api';
+import { apiErrorMessage } from './google';
 import { formatDayLong, timeInMadrid } from './events';
 
 export function path(calendarId: string, eventId: string): string {
@@ -41,6 +42,37 @@ export function clearEventMeta(
   return apiFetch<EventInfo>(`${path(calendarId, eventId)}/meta?scope=${scope}`, {
     method: 'DELETE',
   });
+}
+
+export function setEventDone(
+  calendarId: string,
+  eventId: string,
+  done: boolean,
+): Promise<EventInfo> {
+  return apiFetch<EventInfo>(`${path(calendarId, eventId)}/done`, {
+    method: 'PUT',
+    body: { done },
+  });
+}
+
+/**
+ * Marca/desmarca con actualizacion optimista: apply(next) antes del PUT y apply(!next) si falla.
+ * Devuelve null si fue bien o el mensaje de error.
+ */
+export async function toggleEventDone(
+  calendarId: string,
+  eventId: string,
+  next: boolean,
+  apply: (done: boolean) => void,
+): Promise<string | null> {
+  apply(next);
+  try {
+    await setEventDone(calendarId, eventId, next);
+    return null;
+  } catch (e) {
+    apply(!next);
+    return `No se pudo marcar el evento. ${apiErrorMessage(e)}`;
+  }
 }
 
 /** Cuando ocurre el evento, en texto (Europe/Madrid). */
