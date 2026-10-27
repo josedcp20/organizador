@@ -376,7 +376,7 @@ describe('Notas alarmas', () => {
       });
     render(Notas);
     await fireEvent.click(await screen.findByRole('button', { name: /Rápidas/ }));
-    expect(screen.getByText('Alarma: dom 27/10 18:30')).toBeTruthy();
+    expect(await screen.findByText('Alarma: dom 27/10 18:30')).toBeTruthy();
     expect(screen.getByText('Sonó a las 18:30')).toBeTruthy();
     expect(screen.getByText('No se pudo avisar')).toBeTruthy();
   });
