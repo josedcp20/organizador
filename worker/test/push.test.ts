@@ -12,6 +12,7 @@ import {
 } from '../src/db/pushSubscriptions';
 import { createSession } from '../src/db/sessions';
 import type { Env } from '../src/env';
+import { sendToAll } from '../src/push/send';
 import { publicKeyFromJwk } from '../src/push/webpush';
 import { type CallOptions, call as rawCall } from './helpers';
 
@@ -453,6 +454,18 @@ describe('POST /api/push/test', () => {
     expect(r).toEqual({ sent: 1, failed: 0, removed: 1 });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect((await rows()).map((x) => x.endpoint)).toEqual([APPLE]);
+  });
+
+  it('presupuesto maxSends: con 1 y 2 suscripciones solo 1 fetch', async () => {
+    await twoSubs();
+    const m = { v: 1 as const, title: 't', body: 'b', url: '#/hoy', tag: 'x' };
+    const r = await sendToAll({ ...env, VAPID_PRIVATE_KEY: VAPID } as unknown as Env, m, {
+      ttl: 60,
+      urgency: 'normal',
+      maxSends: 1,
+    });
+    expect(r).toEqual({ sent: 1, failed: 0, removed: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('un fallo no impide enviar al resto', async () => {

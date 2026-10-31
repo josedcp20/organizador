@@ -1,6 +1,6 @@
 <script lang="ts">
   /* global NotificationPermission */
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { PushStatusResponse, PushSubscriptionInfo } from '@organizador/shared';
   import { ApiError } from '../lib/api';
   import {
@@ -28,6 +28,38 @@
 
   const fmtDate = (iso: string | null) =>
     iso ? new Date(iso).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }) : 'nunca';
+
+  let cooldown = $state(0);
+  let timer: ReturnType<typeof setInterval> | undefined;
+  function startCooldown(sec: number) {
+    cooldown = sec;
+    clearInterval(timer);
+    timer = setInterval(() => {
+      cooldown = Math.max(0, cooldown - 1);
+      if (cooldown === 0) clearInterval(timer);
+    }, 1000);
+  }
+  onDestroy(() => clearInterval(timer));
+
+  const fmtTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'Europe/Madrid',
+    });
+
+  const digestText = $derived.by(() => {
+    const d = status?.digest;
+    if (!d) return '';
+    const why = d.lastError ? ` (${d.lastError})` : '';
+    if (d.status === 'sent')
+      return `Resumen de hoy: enviado a las ${d.sentAt ? fmtTime(d.sentAt) : '--:--'}.`;
+    if (d.status === 'failed') return `Resumen de hoy: fallido${why}; se reintentará.`;
+    if (d.status === 'gave_up') return `Resumen de hoy: abandonado tras ${d.attempts} intentos${why}.`;
+    if (d.status === 'no_subscriptions') return 'Resumen de hoy: sin suscripciones, no se envió.';
+    return 'Resumen de hoy: pendiente de envío.';
+  });
 
   const errText = (e: unknown) =>
     e instanceof ApiError
@@ -96,6 +128,7 @@
           : 'No se pudo entregar la prueba a ningún dispositivo.';
       if (r.failed || r.removed) await load();
     } catch (e) {
+      if (e instanceof ApiError && e.status === 429) startCooldown(e.retryAfter ?? 30);
       error = errText(e);
     } finally {
       busy = false;
@@ -146,7 +179,9 @@
   {:else if active}
     <p class="help">Activadas en este dispositivo. Resumen diario a las 8:00.</p>
     <div class="actions">
-      <button type="button" class="btn btn-primary" disabled={busy} onclick={test}>Enviar prueba</button>
+      <button type="button" class="btn btn-primary" disabled={busy || cooldown > 0} onclick={test}
+        >Enviar prueba{cooldown > 0 ? ` (${cooldown} s)` : ''}</button
+      >
       <button type="button" class="btn btn-quiet" disabled={busy} onclick={deactivate}>Desactivar</button>
     </div>
   {:else}
@@ -158,6 +193,7 @@
       onclick={activate}>Activar notificaciones</button
     >
   {/if}
+  {#if digestText}<p class="help" data-testid="digest-status">{digestText}</p>{/if}
   {#if status && status.subscriptions.length > 0}
     <ul class="list" aria-label="Dispositivos con notificaciones">
       {#each status.subscriptions as s (s.id)}

@@ -10,14 +10,15 @@ import {
 import { DEFAULT_MAX_REQUESTS, runSync, SYNC_LOCK_KEY, SYNC_LOCK_TTL_MS } from '../sync/engine';
 import { runAlarms } from './alarms';
 import { runCleanup } from './cleanup';
+import { runNotify } from './notify';
 import { runPendingWrites } from './pendingWrites';
 
 /**
  * Despachador del cron `*\/10 * * * *` (T2.5, D4). Un solo trigger que ejecuta en orden:
  *   0. alarmas de notas rapidas (H5, jobs/alarms.ts; lock propio, sin cron por minuto)
- *   1. escrituras pendientes a Google (T3.10, jobs/pendingWrites.ts)
- *   2. resumen 8:00 / avisos D-N (hook, T4.4/T4.5): si hay envios pendientes se priorizan y se
- *      reduce el presupuesto de sync (subrequests y CPU compartidos)
+ *   1. resumen 8:00 / avisos D-N (T4.4/T4.6, jobs/notify.ts; lock propio): si envia algo, el
+ *      resto de pasos con peticiones se salta en esta ejecucion (U8: la CPU va al cifrado)
+ *   2. escrituras pendientes a Google (T3.10, jobs/pendingWrites.ts)
  *   3. refresco de la lista de calendarios cada 12 h (reintento minimo 1 h tras fallo)
  *   4. sync Google -> D1 (T2.4)
  *   5. limpieza (hook, T3.3: notas caducadas, auth_failures...)
@@ -50,7 +51,8 @@ async function alarmsStep(ctx: StepContext): Promise<void> {
     ctx.nowMs,
     SUBREQUEST_LIMIT - 5 - ctx.reserved - DEFAULT_MAX_REQUESTS,
   );
-  ctx.reserved += r.requests;
+  // U8: tras un envio no se hacen mas peticiones en esta ejecucion (la CPU va al cifrado).
+  ctx.reserved = r.requests > 0 ? SUBREQUEST_LIMIT : ctx.reserved;
   if (r.status === 'ok') console.log('cron', 'alarms', JSON.stringify(r.counts));
 }
 
@@ -66,10 +68,18 @@ async function pendingWritesStep(ctx: StepContext): Promise<void> {
   }
 }
 
-/** HOOK T4.4/T4.5 (pendiente): resumen 8:00 Madrid + avisos D-N con reintentos hasta 12:00. */
-async function digestStep(): Promise<void> {
-  // TODO(T4.4): si hay resumen/avisos que enviar, sumar a ctx.reserved los push previstos
-  // (o enviarlos aqui) para que el sync use menos presupuesto.
+/**
+ * Resumen 8:00 Madrid + avisos D-N (T4.4/T4.6). Va tras `alarms` y antes de `pending_writes`.
+ * Presupuesto: todo lo que dejaron los pasos previos (no reserva el del sync, porque U8 lo salta):
+ * alarms usa como mucho perRun x maxSubscriptions = 15, asi que aqui quedan >= 30 (>= 2 pushes x 5 subs).
+ * U8: si hubo algun envio, el resto del cron (pending_writes, calendarList, sync) no hace peticiones.
+ */
+async function notifyStep(ctx: StepContext): Promise<void> {
+  // CPU: alarms ya cifro hasta 15 push en esta ejecucion; el resumen/avisos esperan al siguiente cron.
+  if (ctx.reserved > 0) return;
+  const r = await runNotify(ctx.env, ctx.nowMs, SUBREQUEST_LIMIT - 5 - ctx.reserved);
+  ctx.reserved = r.requests > 0 ? SUBREQUEST_LIMIT : ctx.reserved;
+  if (r.status === 'ok') console.log('cron', 'notify', r.digest ?? '-', String(r.reminders));
 }
 
 export const CALENDAR_REFRESH_EVERY_MS = 12 * 3_600_000;
@@ -111,6 +121,8 @@ async function syncStep(ctx: StepContext): Promise<void> {
     0,
     Math.min(DEFAULT_MAX_REQUESTS, SUBREQUEST_LIMIT - 5 - ctx.reserved),
   );
+  // U8: sin presupuesto ni siquiera se toma el lock ni se pide token (sin CPU ni red).
+  if (maxRequests === 0) return;
   const r = await runSync(ctx.env, { maxRequests, nowMs: ctx.nowMs });
   if (r.status !== 'ok' && r.status !== 'busy') console.log('cron', 'sync_skipped', r.status);
 }
@@ -122,8 +134,8 @@ async function cleanupStep(ctx: StepContext): Promise<void> {
 
 export const DEFAULT_STEPS: readonly ScheduledStep[] = [
   { name: 'alarms', run: alarmsStep },
+  { name: 'notify', run: notifyStep },
   { name: 'pending_writes', run: pendingWritesStep },
-  { name: 'digest', run: digestStep },
   { name: 'calendar_list_refresh', run: calendarListStep },
   { name: 'sync', run: syncStep },
   { name: 'cleanup', run: cleanupStep },

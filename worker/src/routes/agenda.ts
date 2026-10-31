@@ -1,8 +1,10 @@
 import {
   addDaysToDateStr,
   formatDateInTz,
+  type DigestAlert,
   type EventMetaScope,
   type EventsResponse,
+  type ReminderAlert,
   type TodayResponse,
 } from '@organizador/shared';
 import { Hono, type Context } from 'hono';
@@ -15,7 +17,13 @@ import {
   type MetaKey,
 } from '../db/eventMeta';
 import { setEventDone } from '../db/eventDone';
-import { getEventById, listEventsInRange } from '../db/eventsRead';
+import {
+  dueReminders,
+  getEventById,
+  listEventsInRange,
+  listRemindCandidates,
+} from '../db/eventsRead';
+import { REMIND_HORIZON_DAYS } from '../jobs/notify';
 import type { Env } from '../env';
 import { errorBody } from '../errors';
 import { DEFAULT_TZ } from '../sync/window';
@@ -159,11 +167,34 @@ agenda.get('/api/today', async (c) => {
   const today = formatDateInTz(new Date(nowMs), tz);
   const tomorrow = addDaysToDateStr(today, 1);
   const opts = { nowMs, tz };
-  const [todayEvents, tomorrowEvents] = await Promise.all([
+  const [todayEvents, tomorrowEvents, candidates, alert] = await Promise.all([
     listEventsInRange(c.env.DB, today, today, opts),
     listEventsInRange(c.env.DB, tomorrow, tomorrow, opts),
+    listRemindCandidates(c.env.DB, tomorrow, addDaysToDateStr(today, REMIND_HORIZON_DAYS), opts),
+    c.env.DB.prepare(
+      `SELECT date, status, last_error AS lastError FROM digest_log
+       WHERE date = ?1 AND status IN ('failed', 'gave_up') AND acknowledged = 0`,
+    )
+      .bind(today)
+      .first<DigestAlert>(),
   ]);
+  const reminders: ReminderAlert[] = dueReminders(candidates, today, tz).map(
+    ({ event, date, inDays }) => ({
+      calendarId: event.calendarId,
+      id: event.id,
+      summary: event.summary ?? '',
+      date,
+      inDays,
+    }),
+  );
   c.header('Cache-Control', NO_STORE);
-  const body: TodayResponse = { today, tomorrow, todayEvents, tomorrowEvents };
+  const body: TodayResponse = {
+    today,
+    tomorrow,
+    todayEvents,
+    tomorrowEvents,
+    reminders,
+    digestAlert: alert ?? null,
+  };
   return c.json(body);
 });

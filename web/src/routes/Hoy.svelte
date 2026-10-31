@@ -7,6 +7,7 @@
   import { calendarsWithSyncError, fetchCalendars } from '../lib/calendars';
   import DoneToggle from '../components/DoneToggle.svelte';
   import { toggleEventDone } from '../lib/eventDetail';
+  import { apiFetch } from '../lib/api';
   import { fetchToday, toRows } from '../lib/today';
   import { eventHref, newEventHref } from '../router';
 
@@ -39,7 +40,17 @@
     }
   }
 
-  let doneBusy = $state<Record<string, boolean>>({});
+  let digestClosed = $state(false);
+  async function closeDigest() {
+    digestClosed = true;
+    try {
+      await apiFetch('/api/digest/ack', { method: 'POST', body: {} });
+    } catch {
+      digestClosed = false; // sigue sin cerrar en el servidor: reaparecera, no se pierde el aviso
+    }
+  }
+
+  let doneBusy =$state<Record<string, boolean>>({});
   let doneError = $state('');
 
   async function toggleDone(calendarId: string, eventId: string, key: string, next: boolean) {
@@ -126,6 +137,31 @@
 
 {#if doneError}
   <Banner kind="error">{doneError}</Banner>
+{/if}
+
+{#if data?.digestAlert && !digestClosed}
+  <Banner kind="warning">
+    {data.digestAlert.status === 'gave_up'
+      ? 'No se pudo enviar el resumen de hoy; se ha dejado de intentar.'
+      : 'No se pudo enviar el resumen de hoy.'}{data.digestAlert.lastError
+      ? ` (${data.digestAlert.lastError})`
+      : ''}
+    <button type="button" class="btn btn-quiet" onclick={closeDigest}>Cerrar</button>
+  </Banner>
+{/if}
+
+{#if data?.reminders && data.reminders.length > 0}
+  <section aria-labelledby="hoy-reminders" class="reminders">
+    <h2 id="hoy-reminders" class="sr-only">Avisos</h2>
+    <ul>
+      {#each data.reminders as r (`${r.calendarId}/${r.id}`)}
+        <li>
+          En {r.inDays} {r.inDays === 1 ? 'día' : 'días'}:
+          <a href={eventHref(r.calendarId, r.id)}>{r.summary || '(Sin título)'}</a>
+        </li>
+      {/each}
+    </ul>
+  </section>
 {/if}
 
 {#if loading && !data}
@@ -226,6 +262,13 @@
     font-family: var(--font-body);
     font-size: var(--fs-m);
     font-weight: 400;
+  }
+
+  .reminders ul {
+    margin: 0 0 var(--sp-4);
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-s);
   }
 
   .empty {

@@ -166,6 +166,34 @@ describe('PushSettings', () => {
     expect(JSON.parse(String((del[1] as Init).body))).toEqual({ endpoint: cur.endpoint });
   });
 
+  it.each([
+    [
+      { status: 'sent', sentAt: '2026-10-26T06:05:00.000Z', lastError: null },
+      /enviado a las 07:05/,
+    ],
+    [{ status: 'failed', sentAt: null, lastError: 'rejected_403' }, /fallido \(rejected_403\)/],
+    [{ status: 'gave_up', sentAt: null, lastError: null }, /abandonado tras 3 intentos/],
+    [{ status: 'no_subscriptions', sentAt: null, lastError: null }, /sin suscripciones/],
+  ] as const)('estado del resumen de hoy: %j', async (d, re) => {
+    installPushBrowser();
+    status = { ...status, digest: { date: '2026-10-26', attempts: 3, ...d } };
+    render(PushSettings);
+    expect((await screen.findByTestId('digest-status')).textContent).toMatch(re);
+  });
+
+  it('tras 429 el boton muestra cuenta atras y queda deshabilitado', async () => {
+    installPushBrowser({ permission: 'granted', current: fakeSub('https://web.push.apple.com/X') });
+    localStorage.setItem(PUSH_ENABLED_KEY, '1');
+    routes['POST /api/push/test'] = () =>
+      json({ error: { code: 'rate_limited', message: 'x' } }, 429, { 'Retry-After': '30' });
+    render(PushSettings);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Enviar prueba' }));
+    const btn = (await screen.findByRole('button', {
+      name: /Enviar prueba \(\d+ s\)/,
+    })) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
   it('activar guarda el id devuelto por el servidor', async () => {
     installPushBrowser();
     render(PushSettings);

@@ -1,3 +1,4 @@
+import { purgeExpired as purgeExpiredPush } from '../db/pushSubscriptions';
 import { purgeOrphanDone } from '../db/eventDone';
 import { purgeExpired } from '../db/sessions';
 import { purgeAuthFailures } from '../middleware/auth';
@@ -25,10 +26,22 @@ export async function runCleanup(
   authFailures: number;
   sessions: number;
   challenges: number;
+  pushSubs: number;
+  reminderLog: number;
+  digestLog: number;
 }> {
   const notes = await cleanupExpiredNotes(db, nowMs);
   await purgeOrphanDone(db, nowMs);
   const authFailures = await purgeAuthFailures(db, nowMs);
   const { sessions, challenges } = await purgeExpired(db, nowMs);
-  return { notes, authFailures, sessions, challenges };
+  const pushSubs = await purgeExpiredPush(db, nowMs);
+  const iso = (days: number) => new Date(nowMs - days * 86_400_000).toISOString();
+  const reminderLog =
+    (await db.prepare('DELETE FROM reminder_log WHERE updated_at < ?1').bind(iso(90)).run()).meta
+      .changes ?? 0;
+  // digest_log.date es YYYY-MM-DD (Madrid); comparar con la fecha UTC de corte basta a 60 dias.
+  const digestLog =
+    (await db.prepare('DELETE FROM digest_log WHERE date < ?1').bind(iso(60).slice(0, 10)).run())
+      .meta.changes ?? 0;
+  return { notes, authFailures, sessions, challenges, pushSubs, reminderLog, digestLog };
 }

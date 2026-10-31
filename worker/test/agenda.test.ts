@@ -202,6 +202,18 @@ describe('GET /api/today', () => {
     expect(b.tomorrowEvents).toEqual([]);
   });
 
+  it('reminders: evento marcado a 3 dias', async () => {
+    at('2026-10-23T10:00:00Z');
+    await allDay('a@x', 'r', '2026-10-26', '2026-10-27');
+    await env.DB.prepare(
+      `INSERT INTO event_meta (calendar_id, scope, target_id, remind, updated_at)
+       VALUES ('a@x', 'instance', 'r', 1, '2026-10-01T00:00:00Z')`,
+    ).run();
+    expect((await today()).reminders).toEqual([
+      { calendarId: 'a@x', id: 'r', summary: 'r', date: '2026-10-26', inDays: 3 },
+    ]);
+  });
+
   it('aplica el filtro de calendarios', async () => {
     at('2026-10-23T10:00:00Z');
     await addCal('hidden@x', { enabled: 0 });

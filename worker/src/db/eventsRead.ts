@@ -1,4 +1,9 @@
-import { CALENDAR_PALETTE, addDaysToDateStr, startOfDateInTz } from '@organizador/shared';
+import {
+  CALENDAR_PALETTE,
+  addDaysToDateStr,
+  formatDateInTz,
+  startOfDateInTz,
+} from '@organizador/shared';
 import type { EventInfo } from '@organizador/shared';
 import { now } from '../clock';
 import { metaValuesFromRow, resolveMeta } from './eventMeta';
@@ -126,6 +131,56 @@ export async function listEventsInRange(
       a.info.id.localeCompare(b.info.id),
   );
   return items.map((i) => i.info);
+}
+
+/**
+ * Candidatos a aviso D-N (T4.5): eventos visibles con "Avisar" efectivo (instancia > serie), no
+ * hechos, cuyo INICIO cae en [fromDate, toDate] (YYYY-MM-DD locales, inclusivos). No mira reminder_log.
+ */
+export async function listRemindCandidates(
+  db: D1Database,
+  fromDate: string,
+  toDate: string,
+  opts: ReadOptions = {},
+): Promise<EventInfo[]> {
+  const fromIso = startOfDateInTz(fromDate).toISOString();
+  const toExIso = startOfDateInTz(addDaysToDateStr(toDate, 1)).toISOString();
+  const { results } = await db
+    .prepare(
+      `${SELECT_BASE}${VISIBLE}
+         AND COALESCE(mi.remind, ms.remind, 0) = 1 AND d.done_at IS NULL
+         AND (
+           (e.all_day = 0 AND e.start_at >= ?1 AND e.start_at < ?2)
+           OR (e.all_day = 1 AND e.start_date >= ?3 AND e.start_date <= ?4)
+         )
+       ORDER BY CASE WHEN e.all_day = 1 THEN e.start_date ELSE e.start_at END,
+                e.calendar_id, e.id
+       LIMIT ${MAX_ROWS}`,
+    )
+    .bind(fromIso, toExIso, fromDate, toDate)
+    .all<EventRow>();
+  const win = windowFor(opts);
+  return results.map((r) => toInfo(r, win));
+}
+
+const dayNum = (s: string) => Math.floor(Date.parse(`${s}T00:00:00Z`) / 86_400_000);
+
+/** Candidatos que tocan hoy (2.6): 1 <= dias hasta el dia local de inicio <= remindDaysBefore. */
+export function dueReminders(
+  events: EventInfo[],
+  today: string,
+  tz: string,
+): { event: EventInfo; date: string; inDays: number }[] {
+  const out: { event: EventInfo; date: string; inDays: number }[] = [];
+  for (const event of events) {
+    const date = event.allDay
+      ? event.startDate
+      : event.startAt && formatDateInTz(new Date(event.startAt), tz);
+    if (!date) continue;
+    const inDays = dayNum(date) - dayNum(today);
+    if (inDays >= 1 && inDays <= event.remindDaysBefore) out.push({ event, date, inDays });
+  }
+  return out;
 }
 
 /** Un evento por (calendarId, eventId); null si no existe o su calendario no es visible. */

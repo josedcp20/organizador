@@ -146,6 +146,15 @@ export async function listActive(db: D1Database, nowMs: number): Promise<StoredS
   return results;
 }
 
+/** Borra las suscripciones caducadas (expires_at <= ahora); devuelve cuantas. */
+export async function purgeExpired(db: D1Database, nowMs: number): Promise<number> {
+  const r = await db
+    .prepare('DELETE FROM push_subscriptions WHERE expires_at IS NOT NULL AND expires_at <= ?1')
+    .bind(new Date(nowMs).toISOString())
+    .run();
+  return r.meta.changes ?? 0;
+}
+
 export async function deleteByEndpoint(db: D1Database, endpoint: string): Promise<void> {
   await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1').bind(endpoint).run();
 }

@@ -17,7 +17,12 @@ import {
   type PushRequestOptions,
 } from './webpush';
 
-export type SendOptions = Omit<PushRequestOptions, 'authorization'>;
+/** `maxSends`: presupuesto de fetch por ejecucion (limite de subrequests); las demas quedan sin enviar. */
+export type SendOptions = Omit<PushRequestOptions, 'authorization'> & {
+  maxSends?: number;
+  /** Codigo de error de cada envio fallido de ESTA llamada (para diagnostico agregado). */
+  onError?: (code: string) => void;
+};
 
 /** VAPID_SUBJECT de [vars]; sin el, se usa la URL de la app (U2). */
 export function vapidSubject(env: Env): string {
@@ -42,6 +47,7 @@ export async function sendToAll(
   const subject = vapidSubject(env);
   const jwts = new Map<string, Promise<string>>();
   const result: PushTestResult = { sent: 0, failed: 0, removed: 0 };
+  let budget = opts.maxSends ?? Infinity;
 
   for (const sub of await listActive(env.DB, nowMs)) {
     // Revalida (la fila pudo escribirse sin pasar por la API): nunca hacer fetch a un host no permitido.
@@ -51,6 +57,8 @@ export async function sendToAll(
       result.removed++;
       continue;
     }
+    if (budget <= 0) break;
+    budget--;
     let outcome: PushOutcome;
     try {
       let authorization = jwts.get(url.origin);
@@ -83,6 +91,7 @@ export async function sendToAll(
       outcome = { kind: 'error', code: 'encrypt_error' };
       console.warn('push', url.hostname, 'encrypt_error');
     }
+    if (outcome.kind === 'error') opts.onError?.(outcome.code);
     await markResult(env.DB, sub.endpoint, outcome, nowIso);
     if (outcome.kind === 'ok') result.sent++;
     else if (outcome.kind === 'gone') result.removed++;

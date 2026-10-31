@@ -192,4 +192,41 @@ describe('cleanup', () => {
     const again = await runCleanup(env.DB, T0);
     expect(again.sessions + again.challenges).toBe(0);
   });
+
+  it('purga suscripciones push caducadas, reminder_log > 90 d y digest_log > 60 d', async () => {
+    const iso = (ms: number) => new Date(ms).toISOString();
+    const key = 'AAAA';
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM push_subscriptions'),
+      env.DB.prepare('DELETE FROM reminder_log'),
+      env.DB.prepare('DELETE FROM digest_log'),
+      env.DB.prepare(
+        'INSERT INTO push_subscriptions (endpoint, p256dh, auth, created_at, expires_at) VALUES (?1,?2,?2,?3,?4),(?5,?2,?2,?3,NULL)',
+      ).bind(
+        'https://web.push.apple.com/old',
+        key,
+        iso(T0),
+        iso(T0 - 1),
+        'https://web.push.apple.com/ok',
+      ),
+      env.DB.prepare(
+        "INSERT INTO reminder_log (calendar_id, event_id, start_key, status, updated_at) VALUES ('c','old','k','sent',?1),('c','new','k','sent',?2)",
+      ).bind(iso(T0 - 91 * DAY), iso(T0 - 89 * DAY)),
+      env.DB.prepare("INSERT INTO digest_log (date, status) VALUES (?1,'sent'),(?2,'sent')").bind(
+        iso(T0 - 61 * DAY).slice(0, 10),
+        iso(T0 - 59 * DAY).slice(0, 10),
+      ),
+    ]);
+    const r = await runCleanup(env.DB, T0);
+    expect([r.pushSubs, r.reminderLog, r.digestLog]).toEqual([1, 1, 1]);
+    const count = async (t: string) =>
+      (await env.DB.prepare('SELECT COUNT(*) n FROM ' + t).first<{ n: number }>())!.n;
+    expect([
+      await count('push_subscriptions'),
+      await count('reminder_log'),
+      await count('digest_log'),
+    ]).toEqual([1, 1, 1]);
+    const again = await runCleanup(env.DB, T0);
+    expect([again.pushSubs, again.reminderLog, again.digestLog]).toEqual([0, 0, 0]);
+  });
 });

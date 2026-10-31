@@ -6,7 +6,12 @@ import { toBase64Url } from '../src/crypto/encoding';
 import { acquireLock } from '../src/db/jobLock';
 import type { Env } from '../src/env';
 import { ALARM_LOCK_KEY, runAlarms } from '../src/jobs/alarms';
-import { DEFAULT_STEPS, runScheduled, type StepContext } from '../src/jobs/scheduled';
+import {
+  DEFAULT_STEPS,
+  runScheduled,
+  SUBREQUEST_LIMIT,
+  type StepContext,
+} from '../src/jobs/scheduled';
 import { publicKeyFromJwk } from '../src/push/webpush';
 
 const T = Date.parse('2026-10-27T17:30:00.000Z');
@@ -437,7 +442,7 @@ describe('runAlarms: lock y escrituras', () => {
 });
 
 describe('cron */10', () => {
-  it('alarms es el primer paso de DEFAULT_STEPS y descuenta sus push del presupuesto', async () => {
+  it('alarms es el primer paso de DEFAULT_STEPS y agota el presupuesto (U8) tras enviar', async () => {
     const names = DEFAULT_STEPS.map((s) => s.name);
     expect(names[0]).toBe('alarms');
     expect(names).toContain('sync');
@@ -456,7 +461,7 @@ describe('cron */10', () => {
       },
     ]);
     expect(r.failed).toEqual([]);
-    expect(seen!.reserved).toBe(2);
+    expect(seen!.reserved).toBe(SUBREQUEST_LIMIT);
     expect((await note('n-a1'))!.remind_state).toBe('sent');
   });
 
