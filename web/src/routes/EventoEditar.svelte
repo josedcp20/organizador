@@ -36,6 +36,19 @@
     date = null,
   }: { calendarId?: string; eventId?: string; date?: string | null } = $props();
 
+  // Al cambiar la fecha de inicio, la de fin se mueve los mismos dias (conserva la duracion).
+  const dayNum = (d: string) => Date.parse(`${d}T00:00:00Z`) / 86_400_000;
+  let prevStart: string | null = null;
+  $effect(() => {
+    const s = form?.startDate;
+    if (!form || !s) return;
+    if (prevStart && prevStart !== s && form.endDate) {
+      const end = new Date((dayNum(form.endDate) + dayNum(s) - dayNum(prevStart)) * 86_400_000);
+      if (!Number.isNaN(end.getTime())) form.endDate = end.toISOString().slice(0, 10);
+    }
+    prevStart = s;
+  });
+
   // Sin eventId la pantalla es de alta.
   const editing = $derived(!!eventId);
   const LIMITS = AGENDA_WRITE_LIMITS;

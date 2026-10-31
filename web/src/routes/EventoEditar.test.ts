@@ -177,6 +177,20 @@ describe('EventoEditar: alta', () => {
     expect(bodyOf('POST')).toMatchObject({ allDay: true, start: '2026-11-02', end: '2026-11-05' });
   });
 
+  it('cambiar la fecha de inicio mueve la de fin los mismos dias', async () => {
+    await mountCreate();
+    await fireEvent.input(input('Fecha de inicio'), { target: { value: '2026-11-02' } });
+    await fireEvent.input(input('Fecha de fin'), { target: { value: '2026-11-04' } });
+    await fireEvent.input(input('Fecha de inicio'), { target: { value: '2026-11-10' } });
+    await waitFor(() =>
+      expect((input('Fecha de fin') as HTMLInputElement).value).toBe('2026-11-12'),
+    );
+    await fireEvent.input(input('Fecha de inicio'), { target: { value: '2026-10-30' } });
+    await waitFor(() =>
+      expect((input('Fecha de fin') as HTMLInputElement).value).toBe('2026-11-01'),
+    );
+  });
+
   it('202 pending es exito: navega al detalle', async () => {
     write = () =>
       json(ev({ id: 'p1', calendarId: 'b', pending: { op: 'insert', error: null } }), 202);
