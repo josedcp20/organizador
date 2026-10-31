@@ -15,6 +15,7 @@ import type { Env } from '../src/env';
 import { sendToAll } from '../src/push/send';
 import { publicKeyFromJwk } from '../src/push/webpush';
 import { type CallOptions, call as rawCall } from './helpers';
+import { setupPushFake, type PushFake } from './pushFake';
 
 let VAPID: string;
 let VAPID_PUB: string;
@@ -171,6 +172,7 @@ describe('/api/push/* auth y configuracion', () => {
       ['POST', '/api/push/subscribe'],
       ['DELETE', '/api/push/subscribe'],
       ['POST', '/api/push/test'],
+      ['POST', '/api/push/digest-now'],
     ] as const) {
       const r = await call(path, { method, auth: null });
       expect(r.status, `${method} ${path}`).toBe(401);
@@ -330,6 +332,79 @@ describe('DELETE /api/push/subscribe', () => {
     expect((await del({}, `?id=${await subscriptionId(FCM)}`)).status).toBe(204);
     expect((await del({}, '?id=zz')).status).toBe(400);
     expect((await del({})).status).toBe(400);
+  });
+});
+
+describe('POST /api/push/digest-now', () => {
+  const SECRET = 'SECRETO-privado-123';
+  const opts = (fake: PushFake): CallOptions => ({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    env: { VAPID_PRIVATE_KEY: fake.env.VAPID_PRIVATE_KEY },
+  });
+  const count = async (table: string) =>
+    (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!.n;
+
+  it('401 sin token y 503 sin VAPID', async () => {
+    expect((await call('/api/push/digest-now', { method: 'POST', auth: null })).status).toBe(401);
+    const noKey: CallOptions = { env: { VAPID_PRIVATE_KEY: undefined } as Partial<Env> };
+    expect((await post('/api/push/digest-now', {}, noKey)).status).toBe(503);
+  });
+
+  it('envia el resumen cifrado, sin logs ni campos privados; 429 en la 2a llamada', async () => {
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM events'),
+      env.DB.prepare('DELETE FROM event_meta'),
+      env.DB.prepare('DELETE FROM notes'),
+      env.DB.prepare('DELETE FROM calendars'),
+      env.DB.prepare('DELETE FROM reminder_log'),
+      env.DB.prepare(
+        `INSERT INTO calendars (id, summary, google_color, color, enabled) VALUES ('a@x', 'a', '#9fe1e7', '#1a73e8', 1)`,
+      ),
+      env.DB.prepare(
+        `INSERT INTO events (calendar_id, id, status, summary, location, description, all_day, start_at, end_at)
+           VALUES ('a@x', 'e1', 'confirmed', 'Dentista', ?1, ?1, 0, '2026-10-26T08:30:00Z', '2026-10-26T09:00:00Z')`,
+      ).bind(SECRET),
+      env.DB.prepare(
+        `INSERT INTO event_meta (calendar_id, scope, target_id, notes, updated_at)
+           VALUES ('a@x', 'instance', 'e1', ?1, '2026-10-01T00:00:00Z')`,
+      ).bind(SECRET),
+      env.DB.prepare(
+        `INSERT INTO notes (id, body, kind, created_at, updated_at) VALUES ('q1', ?1, 'quick', '2026-10-25T00:00:00Z', '2026-10-25T00:00:00Z')`,
+      ).bind(SECRET),
+    ]);
+    let t = Date.UTC(2026, 9, 26, 10);
+    setClock(() => t);
+    const fake = await setupPushFake();
+    await fake.addSub(APPLE);
+
+    const r = await call('/api/push/digest-now', opts(fake));
+    expect(r.status).toBe(200);
+    expect((await r.json()) as PushTestResult).toEqual({ sent: 1, failed: 0, removed: 0 });
+    const [p] = await fake.payloads();
+    expect(JSON.stringify(p)).not.toContain(SECRET);
+    expect(p).toEqual({
+      v: 1,
+      title: 'Hoy: 1 evento · Mañana: 0',
+      body: '09:30 Dentista · 1 nota rápida',
+      url: '#/hoy',
+      tag: 'digest-2026-10-26',
+    });
+    const h = fake.headers()[0]!;
+    expect(h.get('Urgency')).toBe('high');
+    expect(h.get('TTL')).toBe('14400');
+    expect(await count('digest_log')).toBe(0);
+    expect(await count('reminder_log')).toBe(0);
+    expect(
+      await env.DB.prepare("SELECT 1 FROM job_state WHERE key = 'notify_lock'").first(),
+    ).toBeNull();
+
+    t += 10_000;
+    const again = await call('/api/push/digest-now', opts(fake));
+    expect(again.status).toBe(429);
+    expect(again.headers.get('Retry-After')).toBe('30');
+    expect(fake.fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

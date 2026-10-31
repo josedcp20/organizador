@@ -39,6 +39,7 @@ beforeEach(() => {
     'POST /api/push/subscribe': () => json({ id: DEVICE.id }),
     'DELETE /api/push/subscribe': () => new Response(null, { status: 204 }),
     'POST /api/push/test': () => json({ sent: 1, failed: 0, removed: 0 }),
+    'POST /api/push/digest-now': () => json({ sent: 2, failed: 0, removed: 0 }),
   };
   fetchMock = vi.fn(async (url: string, init?: Init) => {
     const key = `${init?.method ?? 'GET'} ${new URL(url).pathname}`;
@@ -192,6 +193,51 @@ describe('PushSettings', () => {
       name: /Enviar prueba \(\d+ s\)/,
     })) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
+  });
+
+  describe('Enviar resumen ahora', () => {
+    const open = async () => {
+      installPushBrowser({
+        permission: 'granted',
+        current: fakeSub('https://web.push.apple.com/X'),
+      });
+      localStorage.setItem(PUSH_ENABLED_KEY, '1');
+      render(PushSettings);
+      return (await screen.findByRole('button', {
+        name: 'Enviar resumen ahora',
+      })) as HTMLButtonElement;
+    };
+
+    it('solo aparece con push activo', async () => {
+      installPushBrowser();
+      render(PushSettings);
+      await screen.findByRole('button', { name: 'Activar notificaciones' });
+      expect(screen.queryByRole('button', { name: 'Enviar resumen ahora' })).toBeNull();
+    });
+
+    it('exito: POST y mensaje con el numero de dispositivos', async () => {
+      await fireEvent.click(await open());
+      expect(await screen.findByText('Enviado a 2 dispositivos.')).toBeTruthy();
+      expect(calls('POST /api/push/digest-now')).toHaveLength(1);
+    });
+
+    it('429: error con espera y cuenta atras', async () => {
+      routes['POST /api/push/digest-now'] = () =>
+        json({ error: { code: 'rate_limited', message: 'x' } }, 429, { 'Retry-After': '30' });
+      await fireEvent.click(await open());
+      expect((await screen.findByRole('alert')).textContent).toMatch(/Espera 30 s/);
+      const btn = (await screen.findByRole('button', {
+        name: /Enviar resumen ahora \(\d+ s\)/,
+      })) as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+    });
+
+    it('error del servidor: lo muestra', async () => {
+      routes['POST /api/push/digest-now'] = () =>
+        json({ error: { code: 'push_not_configured', message: 'Push is not configured' } }, 503);
+      await fireEvent.click(await open());
+      expect((await screen.findByRole('alert')).textContent).toMatch(/not configured/);
+    });
   });
 
   it('activar guarda el id devuelto por el servidor', async () => {

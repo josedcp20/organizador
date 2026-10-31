@@ -12,6 +12,7 @@
     localPushId,
     pushSupport,
     removePushDevice,
+    sendDigestNow,
     sendTestPush,
   } from '../lib/push';
 
@@ -116,16 +117,17 @@
     }
   }
 
-  async function test() {
+  async function send(what: 'test' | 'digest') {
     busy = true;
     message = '';
     error = '';
     try {
-      const r = await sendTestPush();
+      const r = await (what === 'test' ? sendTestPush() : sendDigestNow());
+      const n = `${r.sent} dispositivo${r.sent === 1 ? '' : 's'}`;
       message =
         r.sent > 0
-          ? `Prueba enviada a ${r.sent} dispositivo${r.sent === 1 ? '' : 's'}.`
-          : 'No se pudo entregar la prueba a ningún dispositivo.';
+          ? `${what === 'test' ? 'Prueba enviada' : 'Enviado'} a ${n}.`
+          : `No se pudo entregar ${what === 'test' ? 'la prueba' : 'el resumen'} a ningún dispositivo.`;
       if (r.failed || r.removed) await load();
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) startCooldown(e.retryAfter ?? 30);
@@ -179,8 +181,15 @@
   {:else if active}
     <p class="help">Activadas en este dispositivo. Resumen diario a las 8:00.</p>
     <div class="actions">
-      <button type="button" class="btn btn-primary" disabled={busy || cooldown > 0} onclick={test}
+      <button type="button" class="btn btn-primary" disabled={busy || cooldown > 0} onclick={() => send('test')}
         >Enviar prueba{cooldown > 0 ? ` (${cooldown} s)` : ''}</button
+      >
+      <button
+        type="button"
+        class="btn btn-quiet"
+        disabled={busy || cooldown > 0}
+        onclick={() => send('digest')}
+        >Enviar resumen ahora{cooldown > 0 ? ` (${cooldown} s)` : ''}</button
       >
       <button type="button" class="btn btn-quiet" disabled={busy} onclick={deactivate}>Desactivar</button>
     </div>

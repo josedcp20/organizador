@@ -72,6 +72,10 @@ export function sendTestPush(): Promise<PushTestResult> {
   return apiFetch<PushTestResult>('/api/push/test', { method: 'POST', body: {} });
 }
 
+export function sendDigestNow(): Promise<PushTestResult> {
+  return apiFetch<PushTestResult>('/api/push/digest-now', { method: 'POST', body: {} });
+}
+
 export function removePushDevice(id: string): Promise<void> {
   return apiFetch<void>(`/api/push/subscribe?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
