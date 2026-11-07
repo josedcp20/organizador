@@ -630,3 +630,31 @@ export const PUSH_LIMITS = {
   /** Longitud maxima del cuerpo de la notificacion del resumen. */
   bodyMax: 180,
 } as const;
+
+// --- Widget de iOS (Fase 5, T5.2) ---
+
+/** Evento minimo del widget: nunca descripcion, ubicacion, notas ni ids. */
+export interface WidgetEvent {
+  /** "09:30" (Madrid) | null si dia completo. */
+  time: string | null;
+  title: string;
+  done: boolean;
+  /** ISO UTC (null si dia completo), para cuenta atras. */
+  startAt: string | null;
+}
+
+/** `GET /api/widget/today` (contrato v1; cambios incompatibles => `v: 2`). */
+export interface WidgetTodayResponse {
+  v: 1;
+  generatedAt: string;
+  date: string;
+  /** ISO UTC: cuando conviene volver a pedir. */
+  refreshAt: string;
+  today: WidgetEvent[];
+  todayTotal: number;
+  todayDone: number;
+  /** Primer evento de hoy con hora, no hecho y con fin > ahora. */
+  next: WidgetEvent | null;
+  tomorrow: { total: number; first: WidgetEvent | null };
+  reminders: { inDays: number; title: string }[];
+}

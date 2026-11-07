@@ -18,6 +18,7 @@ import { quickNotes } from './routes/quickNotes';
 import { session } from './routes/session';
 import { settings } from './routes/settings';
 import { sync } from './routes/sync';
+import { widget } from './routes/widget';
 import { getVersion } from './version';
 
 export const app = new Hono<AppEnv>();
@@ -41,6 +42,7 @@ app.route('/', notes);
 app.route('/', quickNotes);
 app.route('/', push);
 app.route('/', digest);
+app.route('/', widget);
 
 app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 

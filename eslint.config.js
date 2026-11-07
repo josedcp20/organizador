@@ -6,7 +6,8 @@ import globals from 'globals';
 
 export default [
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/.wrangler/**'],
+    // scriptable/: script de iOS con globals propios (Keychain, Request...) y top-level await.
+    ignores: ['**/node_modules/**', '**/dist/**', '**/.wrangler/**', 'scriptable/**'],
   },
   {
     files: ['**/*.ts'],

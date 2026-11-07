@@ -22,7 +22,8 @@ export interface ReminderItem {
   inDays: number;
 }
 
-const truncate = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+export const truncate = (s: string, max: number) =>
+  s.length > max ? `${s.slice(0, max - 1)}…` : s;
 
 function parts(d: Date, tz: string, opts: Intl.DateTimeFormatOptions) {
   return Object.fromEntries(
@@ -32,12 +33,12 @@ function parts(d: Date, tz: string, opts: Intl.DateTimeFormatOptions) {
   );
 }
 
-const hhmm = (iso: string, tz: string) => {
+export const hhmm = (iso: string, tz: string) => {
   const p = parts(new Date(iso), tz, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
   return `${p.hour}:${p.minute}`;
 };
 
-const name = (e: Pick<EventInfo, 'summary'>) => e.summary?.trim() || '(Sin título)';
+export const name = (e: Pick<EventInfo, 'summary'>) => e.summary?.trim() || '(Sin título)';
 
 /** `09:30 Dentista` | `Todo el día Titulo`, con `✓ ` si esta hecho. */
 function line(e: DigestEvent, tz: string): string {
